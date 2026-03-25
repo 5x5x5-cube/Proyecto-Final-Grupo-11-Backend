@@ -99,15 +99,56 @@ jobs:
           flags: ${{ matrix.service }}
           name: ${{ matrix.service }}
 
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Validate commit messages
+        run: |
+          COMMITS=$(git log --format=%s ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          PATTERN='^(feat|fix|docs|style|refactor|test|chore|revert|ci)(\(.+\))?: .+'
+          FAILED=0
+          while IFS= read -r msg; do
+            if [[ ! "$msg" =~ $PATTERN ]]; then
+              echo "❌ Invalid commit message: $msg"
+              FAILED=1
+            else
+              echo "✅ $msg"
+            fi
+          done <<< "$COMMITS"
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "Commit messages must follow conventional commits format:"
+            echo "  type(scope): description"
+            echo "  e.g., feat(auth): add JWT refresh token endpoint"
+            exit 1
+          fi
+
   all-tests-passed:
-    needs: lint-and-test
+    needs: [lint-and-test, commitlint]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Check if all tests passed
+      - name: Check if all checks passed
         run: |
-          if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
+          if [ "${{ needs.lint-and-test.result }}" != "success" ] && [ "${{ needs.lint-and-test.result }}" != "skipped" ]; then
             echo "Some tests failed"
             exit 1
           fi
-          echo "All tests passed!"
+          if [ "${{ needs.commitlint.result }}" != "success" ] && [ "${{ needs.commitlint.result }}" != "skipped" ]; then
+            echo "Commit lint failed"
+            exit 1
+          fi
+          echo "All checks passed!"

@@ -2,9 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
-    title="Auth Service",
-    description="Authentication and Authorization Service",
-    version="0.1.0"
+    title="Auth Service", description="Authentication and Authorization Service", version="0.1.0"
 )
 
 app.add_middleware(
@@ -15,17 +13,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "auth-service",
-        "version": "0.1.0"
-    }
+    return {"status": "healthy", "service": "auth-service", "version": "0.1.0"}
+
 
 @app.get("/")
 async def root():
-    return {
-        "service": "auth-service",
-        "message": "Authentication and Authorization Service"
-    }
+    return {"service": "auth-service", "message": "Authentication and Authorization Service"}
