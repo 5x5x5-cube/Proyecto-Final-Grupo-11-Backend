@@ -1,0 +1,86 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+spec:
+  rules:
+  - host: api.yourdomain.com
+    http:
+      paths:
+      - path: /auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 80
+      - path: /booking
+        pathType: Prefix
+        backend:
+          service:
+            name: booking-service
+            port:
+              number: 80
+      - path: /search
+        pathType: Prefix
+        backend:
+          service:
+            name: search-service
+            port:
+              number: 80
+      - path: /cart
+        pathType: Prefix
+        backend:
+          service:
+            name: cart-service
+            port:
+              number: 80
+      - path: /reports
+        pathType: Prefix
+        backend:
+          service:
+            name: reports-service
+            port:
+              number: 80
+      - path: /inventory
+        pathType: Prefix
+        backend:
+          service:
+            name: inventory-service
+            port:
+              number: 80
+      - path: /commercial
+        pathType: Prefix
+        backend:
+          service:
+            name: commercial-service
+            port:
+              number: 80
+      - path: /notification
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 80
+      - path: /payment
+        pathType: Prefix
+        backend:
+          service:
+            name: payment-service
+            port:
+              number: 80
+      - path: /health-copilot
+        pathType: Prefix
+        backend:
+          service:
+            name: health-copilot
+            port:
+              number: 80

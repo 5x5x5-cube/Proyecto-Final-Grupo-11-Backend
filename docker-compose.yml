@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build:
+      context: ./services/auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  booking-service:
+    build:
+      context: ./services/booking_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/booking_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  search-service:
+    build:
+      context: ./services/search_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    networks:
+      - microservices
+
+  cart-service:
+    build:
+      context: ./services/cart_service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - microservices
+
+  reports-service:
+    build:
+      context: ./services/reports_service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/reports_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  inventory-service:
+    build:
+      context: ./services/inventory_service
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/inventory_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  commercial-service:
+    build:
+      context: ./services/commercial_service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/commercial_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  notification-service:
+    build:
+      context: ./services/notification_service
+      dockerfile: Dockerfile
+    ports:
+      - "8008:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    networks:
+      - microservices
+
+  payment-service:
+    build:
+      context: ./services/payment_service
+      dockerfile: Dockerfile
+    ports:
+      - "8009:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/payment_db
+    depends_on:
+      - postgres
+    networks:
+      - microservices
+
+  health-copilot:
+    build:
+      context: ./services/health_copilot
+      dockerfile: Dockerfile
+    ports:
+      - "8010:8000"
+    networks:
+      - microservices
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_MULTIPLE_DATABASES=auth_db,booking_db,reports_db,inventory_db,commercial_db,payment_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - microservices
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservices
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  microservices:
+    driver: bridge

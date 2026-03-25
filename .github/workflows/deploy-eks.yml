@@ -1,0 +1,141 @@
+name: Deploy to EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      services:
+        description: 'Services to deploy (comma-separated, or "all")'
+        required: true
+        default: 'all'
+  workflow_run:
+    workflows: ["Build and Push to ECR"]
+    types:
+      - completed
+    branches: [main, develop]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+    steps:
+      - name: Determine environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/develop" ]; then
+            echo "environment=development" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          else
+            echo "environment=development" >> $GITHUB_OUTPUT
+          fi
+
+  deploy:
+    needs: determine-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name proyecto-final-${{ needs.determine-environment.outputs.environment }} --region ${{ env.AWS_REGION }}
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Determine services to deploy
+        id: services
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SERVICES="${{ github.event.inputs.services }}"
+          else
+            SERVICES="all"
+          fi
+          
+          if [ "$SERVICES" == "all" ]; then
+            SERVICES="auth-service,booking-service,search-service,cart-service,reports-service,inventory-service,commercial-service,notification-service,payment-service,health-copilot"
+          fi
+          
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "Deploying services: $SERVICES"
+      
+      - name: Deploy services
+        run: |
+          IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
+          for service in "${SERVICE_ARRAY[@]}"; do
+            service=$(echo $service | xargs)
+            echo "Deploying $service..."
+            kubectl apply -f kubernetes/deployments/${service}.yaml
+          done
+      
+      - name: Deploy Ingress
+        run: |
+          kubectl apply -f kubernetes/ingress.yaml
+      
+      - name: Wait for deployments
+        run: |
+          IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
+          for service in "${SERVICE_ARRAY[@]}"; do
+            service=$(echo $service | xargs)
+            echo "Waiting for $service to be ready..."
+            kubectl rollout status deployment/$service --timeout=5m
+          done
+      
+      - name: Health check
+        run: |
+          IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
+          for service in "${SERVICE_ARRAY[@]}"; do
+            service=$(echo $service | xargs)
+            echo "Checking health of $service..."
+            
+            POD=$(kubectl get pod -l app=$service -o jsonpath="{.items[0].metadata.name}")
+            kubectl exec $POD -- curl -f http://localhost:8000/health || {
+              echo "Health check failed for $service"
+              exit 1
+            }
+          done
+      
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ needs.determine-environment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Services:** ${{ steps.services.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Deployed Pods" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -o wide >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    needs: [determine-environment, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rollback deployment
+        run: |
+          echo "Deployment failed. Manual rollback required."
+          echo "Run: kubectl rollout undo deployment/<service-name>"

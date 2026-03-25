@@ -1,0 +1,121 @@
+name: Build and Push to ECR
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.set-services.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Detect changed services
+        id: set-services
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]; then
+            # Build all services for manual dispatch or version tags
+            SERVICES='["auth-service","booking-service","search-service","cart-service","reports-service","inventory-service","commercial-service","notification-service","payment-service","health-copilot"]'
+          else
+            # Detect changed services
+            CHANGED_SERVICES=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
+            if [ "$CHANGED_SERVICES" == "[]" ] || [ -z "$CHANGED_SERVICES" ]; then
+              SERVICES='[]'
+            else
+              SERVICES=$CHANGED_SERVICES
+            fi
+          fi
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "Changed services: $SERVICES"
+
+  build-and-push:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Extract metadata
+        id: meta
+        run: |
+          SERVICE_NAME=$(echo ${{ matrix.service }} | sed 's/_/-/g')
+          echo "service-name=$SERVICE_NAME" >> $GITHUB_OUTPUT
+          
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${GITHUB_SHA::8}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/proyecto-final-dev-${{ steps.meta.outputs.service-name }}:${{ steps.meta.outputs.version }}
+            ${{ steps.login-ecr.outputs.registry }}/proyecto-final-dev-${{ steps.meta.outputs.service-name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=${{ matrix.service }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.date }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      
+      - name: Update Kubernetes manifest
+        run: |
+          SERVICE_NAME=$(echo ${{ matrix.service }} | sed 's/_/-/g')
+          sed -i "s|\${ECR_REGISTRY}|${{ steps.login-ecr.outputs.registry }}/proyecto-final-dev|g" kubernetes/deployments/${SERVICE_NAME}.yaml
+          sed -i "s|\${IMAGE_TAG}|${{ steps.meta.outputs.version }}|g" kubernetes/deployments/${SERVICE_NAME}.yaml
+      
+      - name: Upload Kubernetes manifests
+        uses: actions/upload-artifact@v3
+        with:
+          name: k8s-manifests-${{ matrix.service }}
+          path: kubernetes/deployments/${{ steps.meta.outputs.service-name }}.yaml
+
+  build-summary:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Build Summary
+        run: |
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "✅ All images built and pushed successfully"
+          else
+            echo "❌ Some builds failed"
+            exit 1
+          fi

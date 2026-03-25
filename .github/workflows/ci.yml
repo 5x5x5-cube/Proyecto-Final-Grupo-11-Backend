@@ -1,0 +1,113 @@
+name: CI - Lint and Test
+
+on:
+  push:
+    branches: [ main, develop, feature/** ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            auth-service:
+              - 'services/auth_service/**'
+            booking-service:
+              - 'services/booking_service/**'
+            search-service:
+              - 'services/search_service/**'
+            cart-service:
+              - 'services/cart_service/**'
+            reports-service:
+              - 'services/reports_service/**'
+            inventory-service:
+              - 'services/inventory_service/**'
+            commercial-service:
+              - 'services/commercial_service/**'
+            notification-service:
+              - 'services/notification_service/**'
+            payment-service:
+              - 'services/payment_service/**'
+            health-copilot:
+              - 'services/health_copilot/**'
+
+  lint-and-test:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles(format('services/{0}/poetry.lock', matrix.service)) }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+      
+      - name: Install dependencies
+        working-directory: services/${{ matrix.service }}
+        run: poetry install
+      
+      - name: Run Black (format check)
+        working-directory: services/${{ matrix.service }}
+        run: poetry run black --check .
+      
+      - name: Run isort (import check)
+        working-directory: services/${{ matrix.service }}
+        run: poetry run isort --check-only .
+      
+      - name: Run Flake8 (linting)
+        working-directory: services/${{ matrix.service }}
+        run: poetry run flake8 app/ tests/
+      
+      - name: Run Bandit (security)
+        working-directory: services/${{ matrix.service }}
+        run: poetry run bandit -r app/
+      
+      - name: Run Tests
+        working-directory: services/${{ matrix.service }}
+        run: poetry run pytest --cov=app --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: services/${{ matrix.service }}/coverage.xml
+          flags: ${{ matrix.service }}
+          name: ${{ matrix.service }}
+
+  all-tests-passed:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check if all tests passed
+        run: |
+          if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
+            echo "Some tests failed"
+            exit 1
+          fi
+          echo "All tests passed!"
