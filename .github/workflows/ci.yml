@@ -18,25 +18,25 @@ jobs:
         id: filter
         with:
           filters: |
-            auth-service:
+            auth_service:
               - 'services/auth_service/**'
-            booking-service:
+            booking_service:
               - 'services/booking_service/**'
-            search-service:
+            search_service:
               - 'services/search_service/**'
-            cart-service:
+            cart_service:
               - 'services/cart_service/**'
-            reports-service:
+            reports_service:
               - 'services/reports_service/**'
-            inventory-service:
+            inventory_service:
               - 'services/inventory_service/**'
-            commercial-service:
+            commercial_service:
               - 'services/commercial_service/**'
-            notification-service:
+            notification_service:
               - 'services/notification_service/**'
-            payment-service:
+            payment_service:
               - 'services/payment_service/**'
-            health-copilot:
+            health_copilot:
               - 'services/health_copilot/**'
 
   lint-and-test:
