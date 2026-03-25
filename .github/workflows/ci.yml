@@ -70,7 +70,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: services/${{ matrix.service }}
-        run: poetry install
+        run: poetry install --no-root
       
       - name: Run Black (format check)
         working-directory: services/${{ matrix.service }}
