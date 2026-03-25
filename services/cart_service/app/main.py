@@ -1,11 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(
-    title="Cart Service",
-    description="Shopping Cart Service",
-    version="0.1.0"
-)
+app = FastAPI(title="Cart Service", description="Shopping Cart Service", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,17 +11,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "cart-service",
-        "version": "0.1.0"
-    }
+    return {"status": "healthy", "service": "cart-service", "version": "0.1.0"}
+
 
 @app.get("/")
 async def root():
-    return {
-        "service": "cart-service",
-        "message": "Shopping Cart Service"
-    }
+    return {"service": "cart-service", "message": "Shopping Cart Service"}

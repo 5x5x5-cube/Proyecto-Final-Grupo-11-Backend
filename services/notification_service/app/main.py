@@ -1,11 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(
-    title="Notification Service",
-    description="Notification Service",
-    version="0.1.0"
-)
+app = FastAPI(title="Notification Service", description="Notification Service", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,17 +11,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "service": "notification-service",
-        "version": "0.1.0"
-    }
+    return {"status": "healthy", "service": "notification-service", "version": "0.1.0"}
+
 
 @app.get("/")
 async def root():
-    return {
-        "service": "notification-service",
-        "message": "Notification Service"
-    }
+    return {"service": "notification-service", "message": "Notification Service"}

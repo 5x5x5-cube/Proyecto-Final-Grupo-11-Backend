@@ -1,15 +1,25 @@
-.PHONY: help install test lint format docker-up docker-down deploy-local clean
+.PHONY: help install setup test lint format format-check docker-up docker-down deploy-local clean
 
 help:
 	@echo "Comandos disponibles:"
+	@echo "  make setup         - Instalar dependencias + configurar git hooks"
 	@echo "  make install       - Instalar dependencias de todos los servicios"
 	@echo "  make test          - Ejecutar tests de todos los servicios"
 	@echo "  make lint          - Ejecutar linting en todos los servicios"
 	@echo "  make format        - Formatear código de todos los servicios"
+	@echo "  make format-check  - Verificar formato sin modificar archivos"
 	@echo "  make docker-up     - Levantar servicios con Docker Compose"
 	@echo "  make docker-down   - Detener servicios Docker Compose"
 	@echo "  make deploy-local  - Desplegar localmente con Docker Compose"
 	@echo "  make clean         - Limpiar archivos temporales"
+
+setup: install
+	pip install pre-commit
+	pre-commit install
+	pre-commit install --hook-type commit-msg
+	cp scripts/pre-push-tests.sh .git/hooks/pre-push
+	chmod +x .git/hooks/pre-push
+	@echo "Git hooks configured!"
 
 install:
 	@echo "Instalando dependencias..."
@@ -37,6 +47,13 @@ format:
 	@for dir in services/*/; do \
 		echo "Formateando $$dir..."; \
 		cd $$dir && poetry run black . && poetry run isort . && cd ../..; \
+	done
+
+format-check:
+	@echo "Verificando formato..."
+	@for dir in services/*/; do \
+		echo "Verificando $$dir..."; \
+		cd $$dir && poetry run black --check . && poetry run isort --check-only . && cd ../..; \
 	done
 
 docker-up:
