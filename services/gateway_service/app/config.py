@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     reports_service_url: str = ""
     notification_service_url: str = ""
     monitor_service_url: str = ""
+    default_user_id: str = ""  # Injected as X-User-Id when no auth service exists
 
     model_config = SettingsConfigDict(env_file=".env")
 

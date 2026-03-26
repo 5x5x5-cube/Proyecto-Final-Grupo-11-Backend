@@ -64,7 +64,6 @@ class AvailabilityRangeResponse(BaseModel):
 
 class CreateHoldRequest(BaseModel):
     room_id: uuid.UUID = Field(..., alias="roomId")
-    user_id: uuid.UUID = Field(..., alias="userId")
     check_in: date = Field(..., alias="checkIn")
     check_out: date = Field(..., alias="checkOut")
 
@@ -92,6 +91,7 @@ class HoldCheckResponse(BaseModel):
     holder_id: uuid.UUID | None = None
     hold_id: uuid.UUID | None = None
     same_user: bool = False
+    expires_at: datetime | None = None
 
 
 # --- Error schemas ---
