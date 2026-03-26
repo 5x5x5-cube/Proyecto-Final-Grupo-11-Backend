@@ -6,16 +6,17 @@ services:
       context: ./services/gateway_service
       dockerfile: Dockerfile
     ports:
-      - "8080:8000"
+      - "8090:8000"
     environment:
       - BOOKING_SERVICE_URL=http://booking-service:8000
-      - AUTH_SERVICE_URL=http://auth-service:8000
-      - SEARCH_SERVICE_URL=http://search-service:8000
-      - CART_SERVICE_URL=http://cart-service:8000
-      - PAYMENT_SERVICE_URL=http://payment-service:8000
-      - REPORTS_SERVICE_URL=http://reports-service:8000
-      - NOTIFICATION_SERVICE_URL=http://notification-service:8000
-      - MONITOR_SERVICE_URL=http://health-copilot:8000
+      # Uncomment as services are implemented:
+      # - AUTH_SERVICE_URL=http://auth-service:8000
+      # - SEARCH_SERVICE_URL=http://search-service:8000
+      # - CART_SERVICE_URL=http://cart-service:8000
+      # - PAYMENT_SERVICE_URL=http://payment-service:8000
+      # - REPORTS_SERVICE_URL=http://reports-service:8000
+      # - NOTIFICATION_SERVICE_URL=http://notification-service:8000
+      # - MONITOR_SERVICE_URL=http://health-copilot:8000
     depends_on:
       - booking-service
     networks:
