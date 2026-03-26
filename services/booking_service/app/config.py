@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     lock_retry_attempts: int = 3
     lock_retry_delay: float = 0.1  # base delay for exponential backoff
 
-    model_config = SettingsConfigDict(env_prefix="BOOKING_", env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env")
 
 
 settings = Settings()
