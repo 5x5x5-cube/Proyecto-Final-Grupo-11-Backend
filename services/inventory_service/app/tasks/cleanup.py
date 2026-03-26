@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 
 from ..config import settings
 from ..database import async_session_factory
@@ -39,6 +39,17 @@ async def cleanup_expired_holds() -> int:
 
                 # Update hold status
                 hold.status = "expired"
+
+                # Expire associated booking (cross-service, shared DB)
+                # Uses raw SQL to avoid importing booking_service models
+                await db.execute(
+                    text(
+                        "UPDATE bookings SET status = 'expired', "
+                        "updated_at = NOW() "
+                        "WHERE hold_id = :hold_id AND status = 'pending'"
+                    ),
+                    {"hold_id": str(hold.id)},
+                )
 
                 # Clean up Redis keys (should already be expired via TTL, but belt-and-suspenders)
                 dates = _date_range(hold.check_in, hold.check_out)

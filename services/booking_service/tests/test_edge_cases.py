@@ -165,8 +165,12 @@ async def test_hold_response_missing_expires_at(mock_lock_factory, mock_inventor
 
 @patch("app.services.booking_service.inventory_client")
 @patch("app.services.booking_service.create_booking_lock")
-async def test_same_user_re_hold_proceeds_normally(mock_lock_factory, mock_inventory):
-    """When hold_check returns held=True and same_user=True, booking proceeds without raising."""
+async def test_same_user_re_hold_returns_existing_booking(mock_lock_factory, mock_inventory):
+    """When same user already holds this room, return the existing pending booking (idempotent)."""
+    from unittest.mock import MagicMock
+
+    from app.models import Booking
+
     mock_inventory.check_hold = AsyncMock(
         return_value={
             "held": True,
@@ -175,26 +179,45 @@ async def test_same_user_re_hold_proceeds_normally(mock_lock_factory, mock_inven
             "hold_id": str(HOLD_ID),
         }
     )
-    mock_inventory.create_hold = AsyncMock(
-        return_value=_make_hold_response(
-            expires_at=(datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
-        )
+
+    existing_booking = Booking(
+        id=uuid.uuid4(),
+        code="BK-EXISTING",
+        user_id=USER_ID,
+        hotel_id=HOTEL_ID,
+        room_id=ROOM_ID,
+        hold_id=HOLD_ID,
+        check_in=date.today() + timedelta(days=1),
+        check_out=date.today() + timedelta(days=3),
+        guests=2,
+        status="pending",
+        base_price=500000,
+        tax_amount=95000,
+        service_fee=0,
+        total_price=595000,
+        currency="COP",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
-    mock_lock_factory.return_value = _make_lock_mock()
 
     db = AsyncMock()
-    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = existing_booking
+    db.execute.return_value = result_mock
+
     redis = AsyncMock()
-    check_in = date.today() + timedelta(days=1)
-    check_out = date.today() + timedelta(days=3)
-    request = _make_request(check_in=check_in, check_out=check_out)
+    request = _make_request(
+        check_in=date.today() + timedelta(days=1),
+        check_out=date.today() + timedelta(days=3),
+    )
 
     result = await create_booking(db=db, redis=redis, request=request)
 
+    assert result.code == "BK-EXISTING"
     assert result.status == "pending"
-    mock_inventory.create_hold.assert_called_once()
-    db.add.assert_called_once()
-    db.commit.assert_called_once()
+    # Should NOT have tried to create a new hold or booking
+    mock_inventory.create_hold.assert_not_called()
+    db.add.assert_not_called()
 
 
 @patch("app.services.booking_service.inventory_client")
