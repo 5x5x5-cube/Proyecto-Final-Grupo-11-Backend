@@ -139,3 +139,109 @@ async def test_create_booking_db_failure_compensates(mock_lock_factory, mock_inv
 
     # Verify compensation was called
     mock_inventory.release_hold.assert_called_once_with(uuid.UUID(hold_id))
+
+
+@patch("app.services.booking_service.inventory_client")
+async def test_same_user_re_reserve_returns_existing_booking(mock_inventory):
+    """When same user already holds the room, return the existing pending booking."""
+    hold_id = uuid.uuid4()
+    mock_inventory.check_hold = AsyncMock(
+        return_value={
+            "held": True,
+            "same_user": True,
+            "holder_id": str(uuid.UUID("c1000000-0000-0000-0000-000000000001")),
+            "hold_id": str(hold_id),
+        }
+    )
+
+    # Mock DB to return an existing booking
+    from unittest.mock import MagicMock
+
+    from app.models import Booking
+
+    existing_booking = Booking(
+        id=uuid.uuid4(),
+        code="BK-EXISTING",
+        user_id=uuid.UUID("c1000000-0000-0000-0000-000000000001"),
+        hotel_id=uuid.UUID("a1000000-0000-0000-0000-000000000001"),
+        room_id=uuid.UUID("b1000000-0000-0000-0000-000000000001"),
+        hold_id=hold_id,
+        check_in=date.today() + timedelta(days=1),
+        check_out=date.today() + timedelta(days=3),
+        guests=2,
+        status="pending",
+        base_price=500000,
+        tax_amount=95000,
+        service_fee=0,
+        total_price=595000,
+        currency="COP",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = existing_booking
+    db.execute.return_value = result_mock
+
+    redis = AsyncMock()
+    request = _make_request()
+
+    result = await create_booking(db=db, redis=redis, request=request)
+
+    assert result.code == "BK-EXISTING"
+    assert result.status == "pending"
+    # Should NOT have called create_hold (no new hold needed)
+    mock_inventory.create_hold.assert_not_called()
+
+
+@patch("app.services.booking_service.inventory_client")
+@patch("app.services.booking_service.create_booking_lock")
+async def test_same_user_hold_but_no_booking_creates_new(mock_lock_factory, mock_inventory):
+    """Edge case: same user has hold but booking record is missing — create new."""
+    hold_id = uuid.uuid4()
+    mock_inventory.check_hold = AsyncMock(
+        return_value={
+            "held": True,
+            "same_user": True,
+            "holder_id": str(uuid.UUID("c1000000-0000-0000-0000-000000000001")),
+            "hold_id": str(hold_id),
+        }
+    )
+    mock_inventory.create_hold = AsyncMock(return_value=_make_hold_response())
+
+    # DB returns no existing booking for this hold
+    from unittest.mock import MagicMock
+
+    db = AsyncMock()
+    # First call: idempotency check returns None
+    idempotency_result = MagicMock()
+    idempotency_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = idempotency_result
+
+    # Mock db.refresh to populate auto-generated fields
+    async def fake_refresh(obj):
+        if obj.id is None:
+            obj.id = uuid.uuid4()
+        if obj.code is None:
+            obj.code = "BK-NEW12345"
+        if obj.created_at is None:
+            obj.created_at = datetime.now(timezone.utc)
+        if obj.updated_at is None:
+            obj.updated_at = datetime.now(timezone.utc)
+
+    db.refresh = AsyncMock(side_effect=fake_refresh)
+
+    mock_lock = AsyncMock()
+    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
+    mock_lock.__aexit__ = AsyncMock(return_value=False)
+    mock_lock_factory.return_value = mock_lock
+
+    redis = AsyncMock()
+    request = _make_request()
+
+    result = await create_booking(db=db, redis=redis, request=request)
+
+    assert result.status == "pending"
+    # Should have proceeded to create a new hold + booking
+    mock_inventory.create_hold.assert_called_once()
