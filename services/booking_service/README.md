@@ -1,28 +1,26 @@
 # Booking Service
 
-Booking management microservice.
+Manages confirmed reservation records. Receives pre-calculated booking data and persists it as a confirmed booking. Does not create holds or interact with the Inventory Service directly.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full details.
 
 ## Endpoints
 
-- `GET /health` - Health check endpoint
-- `GET /` - Service information
+Endpoints that require user identification use the `X-User-Id` header (UUID).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/bookings` | Create a confirmed booking (requires `X-User-Id`) |
+| GET | `/api/v1/bookings/{id}` | Booking detail |
+| GET | `/api/v1/bookings` | List user's bookings (requires `X-User-Id`) |
+| GET | `/health` | Health check |
 
 ## Development
 
 ```bash
-# Install dependencies
 poetry install
-
-# Run service
 poetry run uvicorn app.main:app --reload --port 8002
-
-# Run tests
 poetry run pytest
-
-# Format code
-poetry run black .
-poetry run isort .
-
-# Lint
-poetry run flake8 .
+poetry run black app/ tests/ --line-length 100
+poetry run isort app/ tests/ --profile black --line-length 100
 ```

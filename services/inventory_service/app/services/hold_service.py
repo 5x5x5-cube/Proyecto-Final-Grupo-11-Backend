@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import redis.asyncio as aioredis
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -78,6 +78,16 @@ async def create_hold(
     hold_check = await check_hold(redis, room_id, check_in, check_out, user_id)
     if hold_check["held"] and not hold_check.get("same_user"):
         raise RoomHeldError(str(room_id), str(hold_check["holder_id"]))
+
+    # Hold-per-user upsert: release any active hold the same user has on a different room
+    existing_hold_result = await db.execute(
+        select(Hold).where(
+            and_(Hold.user_id == user_id, Hold.status == "active", Hold.room_id != room_id)
+        )
+    )
+    old_hold = existing_hold_result.scalar_one_or_none()
+    if old_hold:
+        await release_hold(db, redis, old_hold.id)
 
     # Reserve dates (SELECT FOR UPDATE + decrement)
     await reserve_dates(db, room_id, check_in, check_out)

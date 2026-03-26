@@ -6,6 +6,8 @@ import httpx
 from fastapi import Request
 from fastapi.responses import Response
 
+from .config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +33,10 @@ async def proxy_request(request: Request, target_base_url: str) -> Response:
     # Filter out hop-by-hop headers
     hop_by_hop = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
     headers = {k: v for k, v in request.headers.items() if k.lower() not in hop_by_hop}
+
+    # Inject default X-User-Id when no auth service exists yet
+    if "x-user-id" not in headers and settings.default_user_id:
+        headers["X-User-Id"] = settings.default_user_id
 
     logger.info(f"Proxying {request.method} {request.url.path} -> {target_url}")
 

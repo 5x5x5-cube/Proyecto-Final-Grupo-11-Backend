@@ -27,7 +27,6 @@ async def test_cleanup_finds_and_cleans_expired_holds(mock_session_factory, mock
     db = AsyncMock()
     result_mock = MagicMock()
     result_mock.scalars.return_value.all.return_value = [hold]
-    # First call returns holds query, subsequent calls (booking UPDATE) return default AsyncMock
     db.execute = AsyncMock(return_value=result_mock)
     mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=db)
     mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -45,12 +44,10 @@ async def test_cleanup_finds_and_cleans_expired_holds(mock_session_factory, mock
     mock_release.assert_called_once()
     db.commit.assert_called_once()
 
-    # Verify booking expiry SQL was executed (second db.execute call)
-    assert db.execute.call_count >= 2
-    booking_update_call = db.execute.call_args_list[1]
-    sql_text = str(booking_update_call.args[0])
-    assert "UPDATE bookings" in sql_text
-    assert "expired" in sql_text
+    # Verify no booking UPDATE SQL was executed — only the initial hold query
+    assert db.execute.call_count == 1
+    sql_text = str(db.execute.call_args_list[0].args[0])
+    assert "UPDATE bookings" not in sql_text
 
 
 @patch("app.tasks.cleanup.get_redis")
@@ -102,3 +99,28 @@ async def test_cleanup_handles_individual_hold_error(mock_session_factory, mock_
     # Only second hold was cleaned
     assert cleaned == 1
     db.commit.assert_called_once()
+
+
+@patch("app.tasks.cleanup.get_redis")
+@patch("app.tasks.cleanup.async_session_factory")
+async def test_cleanup_does_not_interact_with_bookings_table(mock_session_factory, mock_get_redis):
+    """Verify cleanup no longer updates the bookings table (no cross-service coupling)."""
+    hold = _make_expired_hold()
+
+    db = AsyncMock()
+    result_mock = MagicMock()
+    result_mock.scalars.return_value.all.return_value = [hold]
+    db.execute = AsyncMock(return_value=result_mock)
+    mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=db)
+    mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    redis = AsyncMock()
+    mock_get_redis.return_value = redis
+
+    with patch("app.tasks.cleanup.release_dates", new_callable=AsyncMock):
+        await cleanup_expired_holds()
+
+    # Verify none of the DB execute calls contained a booking UPDATE
+    for call in db.execute.call_args_list:
+        sql_text = str(call.args[0])
+        assert "UPDATE bookings" not in sql_text, "Cleanup should not update the bookings table"
