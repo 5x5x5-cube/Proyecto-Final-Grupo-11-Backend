@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import DECIMAL, Date, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DECIMAL, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -31,7 +31,9 @@ class Room(Base):
     __tablename__ = "rooms"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    hotel_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    hotel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("hotels.id"), nullable=False
+    )
     room_type: Mapped[str] = mapped_column(String(50), nullable=False)
     room_number: Mapped[str | None] = mapped_column(String(20))
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -56,7 +58,9 @@ class Availability(Base):
     __table_args__ = (UniqueConstraint("room_id", "date", name="uix_room_date"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False
+    )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     total_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     available_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -76,7 +80,9 @@ class Hold(Base):
     __tablename__ = "holds"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    room_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False
+    )
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     check_in: Mapped[date] = mapped_column(Date, nullable=False)
     check_out: Mapped[date] = mapped_column(Date, nullable=False)

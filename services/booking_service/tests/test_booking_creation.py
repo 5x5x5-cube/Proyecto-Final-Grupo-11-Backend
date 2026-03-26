@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -39,9 +39,9 @@ def _make_hold_response(hold_id=None):
 @patch("app.services.booking_service.inventory_client")
 @patch("app.services.booking_service.create_booking_lock")
 async def test_create_booking_success(mock_lock_factory, mock_inventory):
-    # Setup mocks
-    mock_inventory.check_hold.return_value = {"held": False}
-    mock_inventory.create_hold.return_value = _make_hold_response()
+    # Setup mocks — use AsyncMock for async functions
+    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
+    mock_inventory.create_hold = AsyncMock(return_value=_make_hold_response())
 
     mock_lock = AsyncMock()
     mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
@@ -49,6 +49,20 @@ async def test_create_booking_success(mock_lock_factory, mock_inventory):
     mock_lock_factory.return_value = mock_lock
 
     db = AsyncMock()
+
+    # Mock db.refresh to populate auto-generated fields on the booking
+    async def fake_refresh(obj):
+        if obj.id is None:
+            obj.id = uuid.uuid4()
+        if obj.code is None:
+            obj.code = "BK-TEST1234"
+        if obj.created_at is None:
+            obj.created_at = datetime.now(timezone.utc)
+        if obj.updated_at is None:
+            obj.updated_at = datetime.now(timezone.utc)
+
+    db.refresh = AsyncMock(side_effect=fake_refresh)
+
     redis = AsyncMock()
     request = _make_request()
 
@@ -65,11 +79,13 @@ async def test_create_booking_success(mock_lock_factory, mock_inventory):
 
 @patch("app.services.booking_service.inventory_client")
 async def test_create_booking_room_held_by_other(mock_inventory):
-    mock_inventory.check_hold.return_value = {
-        "held": True,
-        "holder_id": str(uuid.uuid4()),
-        "hold_id": str(uuid.uuid4()),
-    }
+    mock_inventory.check_hold = AsyncMock(
+        return_value={
+            "held": True,
+            "holder_id": str(uuid.uuid4()),
+            "hold_id": str(uuid.uuid4()),
+        }
+    )
 
     db = AsyncMock()
     redis = AsyncMock()
@@ -82,9 +98,9 @@ async def test_create_booking_room_held_by_other(mock_inventory):
 @patch("app.services.booking_service.inventory_client")
 @patch("app.services.booking_service.create_booking_lock")
 async def test_create_booking_inventory_unavailable(mock_lock_factory, mock_inventory):
-    mock_inventory.check_hold.return_value = {"held": False}
-    mock_inventory.create_hold.side_effect = InventoryServiceError(
-        "Room unavailable", status_code=409
+    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
+    mock_inventory.create_hold = AsyncMock(
+        side_effect=InventoryServiceError("Room unavailable", status_code=409)
     )
 
     mock_lock = AsyncMock()
@@ -104,8 +120,8 @@ async def test_create_booking_inventory_unavailable(mock_lock_factory, mock_inve
 @patch("app.services.booking_service.create_booking_lock")
 async def test_create_booking_db_failure_compensates(mock_lock_factory, mock_inventory):
     hold_id = str(uuid.uuid4())
-    mock_inventory.check_hold.return_value = {"held": False}
-    mock_inventory.create_hold.return_value = _make_hold_response(hold_id)
+    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
+    mock_inventory.create_hold = AsyncMock(return_value=_make_hold_response(hold_id))
     mock_inventory.release_hold = AsyncMock()
 
     mock_lock = AsyncMock()
