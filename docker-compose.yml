@@ -8,7 +8,7 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -21,9 +21,13 @@ services:
     ports:
       - "8002:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/booking_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/0
+      - BOOKING_INVENTORY_SERVICE_URL=http://inventory-service:8000
     depends_on:
       - postgres
+      - redis
+      - inventory-service
     networks:
       - microservices
 
@@ -56,7 +60,7 @@ services:
     ports:
       - "8005:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/reports_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -69,9 +73,11 @@ services:
     ports:
       - "8006:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/inventory_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - postgres
+      - redis
     networks:
       - microservices
 
@@ -82,7 +88,7 @@ services:
     ports:
       - "8007:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/commercial_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -108,7 +114,7 @@ services:
     ports:
       - "8009:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/payment_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -128,7 +134,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_MULTIPLE_DATABASES=auth_db,booking_db,reports_db,inventory_db,commercial_db,payment_db
+      - POSTGRES_DB=travelhub
     ports:
       - "5432:5432"
     volumes:
