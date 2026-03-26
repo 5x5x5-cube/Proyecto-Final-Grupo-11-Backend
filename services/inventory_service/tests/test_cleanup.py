@@ -27,7 +27,8 @@ async def test_cleanup_finds_and_cleans_expired_holds(mock_session_factory, mock
     db = AsyncMock()
     result_mock = MagicMock()
     result_mock.scalars.return_value.all.return_value = [hold]
-    db.execute.return_value = result_mock
+    # First call returns holds query, subsequent calls (booking UPDATE) return default AsyncMock
+    db.execute = AsyncMock(return_value=result_mock)
     mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=db)
     mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -43,6 +44,13 @@ async def test_cleanup_finds_and_cleans_expired_holds(mock_session_factory, mock
     assert hold.status == "expired"
     mock_release.assert_called_once()
     db.commit.assert_called_once()
+
+    # Verify booking expiry SQL was executed (second db.execute call)
+    assert db.execute.call_count >= 2
+    booking_update_call = db.execute.call_args_list[1]
+    sql_text = str(booking_update_call.args[0])
+    assert "UPDATE bookings" in sql_text
+    assert "expired" in sql_text
 
 
 @patch("app.tasks.cleanup.get_redis")
