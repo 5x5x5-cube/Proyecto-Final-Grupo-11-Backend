@@ -12,7 +12,7 @@ from ..redis_client import get_redis
 from ..schemas import BookingListResponse, BookingResponse, CreateBookingRequest
 from ..services.booking_service import create_booking
 
-router = APIRouter(prefix="/bookings", tags=["bookings"])
+router = APIRouter(prefix="/api/v1/bookings", tags=["bookings"])
 
 
 @router.post("", response_model=BookingResponse, status_code=201)
