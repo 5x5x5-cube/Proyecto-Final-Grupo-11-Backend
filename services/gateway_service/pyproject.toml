@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "inventory-service"
+name = "gateway-service"
 version = "0.1.0"
-description = "Inventory Management Service"
+description = "API Gateway Service"
 authors = ["Your Team <team@example.com>"]
 readme = "README.md"
 
@@ -11,11 +11,7 @@ fastapi = "^0.109.0"
 uvicorn = {extras = ["standard"], version = "^0.27.0"}
 pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
-sqlalchemy = "^2.0.25"
-asyncpg = "^0.29.0"
 httpx = "^0.26.0"
-redis = "^5.0.1"
-alembic = "^1.13.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -26,7 +22,6 @@ flake8 = "^7.0.0"
 isort = "^5.13.0"
 mypy = "^1.8.0"
 bandit = "^1.7.5"
-fakeredis = "^2.21.0"
 
 [build-system]
 requires = ["poetry-core"]
