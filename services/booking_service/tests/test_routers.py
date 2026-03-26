@@ -107,7 +107,7 @@ async def test_post_bookings_success_201():
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.post("/bookings", json=VALID_PAYLOAD)
+                resp = await client.post("/api/v1/bookings", json=VALID_PAYLOAD)
         finally:
             app.dependency_overrides.clear()
 
@@ -130,7 +130,7 @@ async def test_post_bookings_conflict_409():
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.post("/bookings", json=VALID_PAYLOAD)
+                resp = await client.post("/api/v1/bookings", json=VALID_PAYLOAD)
         finally:
             app.dependency_overrides.clear()
 
@@ -151,7 +151,7 @@ async def test_post_bookings_service_busy_503():
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
             ) as client:
-                resp = await client.post("/bookings", json=VALID_PAYLOAD)
+                resp = await client.post("/api/v1/bookings", json=VALID_PAYLOAD)
         finally:
             app.dependency_overrides.clear()
 
@@ -175,7 +175,7 @@ async def test_post_bookings_validation_error_422():
     app.dependency_overrides[get_redis] = lambda: AsyncMock()
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/bookings", json=incomplete_payload)
+            resp = await client.post("/api/v1/bookings", json=incomplete_payload)
     finally:
         app.dependency_overrides.clear()
 
@@ -199,7 +199,7 @@ async def test_get_booking_detail_200():
     app.dependency_overrides[get_db] = lambda: mock_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get(f"/bookings/{BOOKING_ID}")
+            resp = await client.get(f"/api/v1/bookings/{BOOKING_ID}")
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -220,7 +220,7 @@ async def test_get_booking_detail_404():
     app.dependency_overrides[get_db] = lambda: mock_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get(f"/bookings/{BOOKING_ID}")
+            resp = await client.get(f"/api/v1/bookings/{BOOKING_ID}")
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -253,7 +253,7 @@ async def test_list_bookings_200():
     app.dependency_overrides[get_db] = lambda: mock_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/bookings", params={"userId": str(USER_ID)})
+            resp = await client.get("/api/v1/bookings", params={"userId": str(USER_ID)})
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -284,7 +284,7 @@ async def test_list_bookings_filtered_by_status_200():
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
-                "/bookings", params={"userId": str(USER_ID), "status": "pending"}
+                "/api/v1/bookings", params={"userId": str(USER_ID), "status": "pending"}
             )
     finally:
         app.dependency_overrides.pop(get_db, None)
