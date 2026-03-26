@@ -91,6 +91,7 @@ class HoldCheckResponse(BaseModel):
     held: bool
     holder_id: uuid.UUID | None = None
     hold_id: uuid.UUID | None = None
+    same_user: bool = False
 
 
 # --- Error schemas ---

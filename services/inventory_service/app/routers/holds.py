@@ -90,4 +90,5 @@ async def check_hold_endpoint(
         held=result["held"],
         holder_id=result.get("holder_id"),
         hold_id=result.get("hold_id"),
+        same_user=result.get("same_user", False),
     )
