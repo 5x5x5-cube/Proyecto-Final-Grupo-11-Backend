@@ -19,7 +19,7 @@ alembic = "^1.13.1"
 python-multipart = "^0.0.6"
 
 [tool.black]
-line-length = 88
+line-length = 100
 target-version = ['py311']
 
 [tool.poetry.group.dev.dependencies]
