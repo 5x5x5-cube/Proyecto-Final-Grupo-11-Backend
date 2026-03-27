@@ -11,16 +11,10 @@ router = APIRouter(prefix="/search", tags=["search"])
 @router.get("/hotels")
 async def search_hotels(
     city: Optional[str] = Query(None, description="City to search in"),
-    check_in: Optional[date] = Query(
-        None, description="Check-in date (YYYY-MM-DD)"
-    ),
-    check_out: Optional[date] = Query(
-        None, description="Check-out date (YYYY-MM-DD)"
-    ),
+    check_in: Optional[date] = Query(None, description="Check-in date (YYYY-MM-DD)"),
+    check_out: Optional[date] = Query(None, description="Check-out date (YYYY-MM-DD)"),
     guests: Optional[int] = Query(None, ge=1, description="Number of guests"),
-    min_rating: Optional[float] = Query(
-        None, ge=0, le=5, description="Minimum rating"
-    ),
+    min_rating: Optional[float] = Query(None, ge=0, le=5, description="Minimum rating"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
@@ -46,14 +40,10 @@ async def search_hotels(
 
     if check_in:
         if check_in < date.today():
-            raise HTTPException(
-                status_code=400, detail="Check-in date cannot be in the past"
-            )
+            raise HTTPException(status_code=400, detail="Check-in date cannot be in the past")
 
     if guests is not None and guests <= 0:
-        raise HTTPException(
-            status_code=400, detail="Number of guests must be greater than zero"
-        )
+        raise HTTPException(status_code=400, detail="Number of guests must be greater than zero")
 
     result = search_service.search_hotels(
         city=city,
