@@ -1,11 +1,11 @@
 import json
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.exceptions import HoldNotFoundError, RoomHeldError
+from app.exceptions import HoldNotFoundError
 from app.services.hold_service import check_hold, release_hold
 
 

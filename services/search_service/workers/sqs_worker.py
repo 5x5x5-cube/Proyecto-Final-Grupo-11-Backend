@@ -3,8 +3,6 @@
 SQS Worker for Search Service
 """
 
-import asyncio
-import logging
 import sys
 import time
 from pathlib import Path
@@ -12,8 +10,8 @@ from pathlib import Path
 # Add parent directory to path to import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.config import get_settings
-from app.services.sqs_consumer import consumer
+from app.config import get_settings  # noqa: E402
+from app.services.sqs_consumer import consumer  # noqa: E402
 
 settings = get_settings()
 
