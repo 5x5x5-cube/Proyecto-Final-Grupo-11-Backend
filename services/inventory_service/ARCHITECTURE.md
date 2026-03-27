@@ -99,16 +99,22 @@ Alembic version table: `alembic_version_inventory` (isolated from other services
 
 ## API Endpoints
 
-| Method | Path | Description | Response |
-|--------|------|-------------|----------|
-| GET | `/rooms/{id}` | Room details | 200 / 404 |
-| GET | `/rooms/{id}/hotel` | Hotel for a room | 200 / 404 |
-| GET | `/rooms/{id}/availability?checkIn&checkOut` | Availability per date | 200 / 404 |
-| GET | `/holds/check/{roomId}?checkIn&checkOut&userId` | Quick Redis hold check | 200 |
-| POST | `/holds` | Create a 15-min hold | 201 / 409 |
-| GET | `/holds/{id}` | Hold status + remaining TTL | 200 / 404 |
-| DELETE | `/holds/{id}` | Release hold + restore inventory | 204 / 404 |
-| GET | `/health` | Health check | 200 |
+All hold endpoints that require user identification use the `X-User-Id` header (UUID).
+
+| Method | Path | Headers | Description | Response |
+|--------|------|---------|-------------|----------|
+| GET | `/rooms/{id}` | — | Room details | 200 / 404 |
+| GET | `/rooms/{id}/hotel` | — | Hotel for a room | 200 / 404 |
+| GET | `/rooms/{id}/availability?checkIn&checkOut` | — | Availability per date | 200 / 404 |
+| GET | `/holds/check/{roomId}?checkIn&checkOut` | `X-User-Id` | Quick Redis hold check (returns `expires_at`) | 200 |
+| POST | `/holds` | `X-User-Id` | Create a 15-min hold (auto-releases existing hold for different room) | 201 / 409 |
+| GET | `/holds/{id}` | — | Hold status + remaining TTL | 200 / 404 |
+| DELETE | `/holds/{id}` | — | Release hold + restore inventory | 204 / 404 |
+| GET | `/health` | — | Health check | 200 |
+
+### Hold-per-user Upsert
+
+When `POST /holds` is called and the user already has an active hold on a **different** room, the old hold is automatically released before creating the new one. This ensures at most one active hold per user system-wide. Holds on the **same** room are idempotent — the existing hold is returned.
 
 ## Sequence Diagrams
 
@@ -116,14 +122,20 @@ Alembic version table: `alembic_version_inventory` (isolated from other services
 
 ```mermaid
 sequenceDiagram
-    participant B as booking_service
+    participant C as cart_service
     participant I as inventory_service
     participant DB as PostgreSQL
     participant R as Redis
 
-    B->>I: POST /holds {roomId, userId, checkIn, checkOut}
+    C->>I: POST /holds [X-User-Id: uuid] {roomId, checkIn, checkOut}
     I->>R: GET room_hold:{roomId}:{date} (for each date)
     R-->>I: null (no existing hold)
+
+    Note over I: Hold-per-user check
+    I->>DB: SELECT FROM holds WHERE user_id=? AND status='active' AND room_id != ?
+    alt User has hold on different room
+        I->>I: release_hold(old_hold) — restore availability + delete Redis keys
+    end
 
     loop For each date in range
         I->>DB: SELECT FROM availability WHERE room_id=? AND date=? FOR UPDATE
@@ -136,21 +148,21 @@ sequenceDiagram
     I->>R: SET hold:{holdId} {json} EX 900
     I->>R: SET room_hold:{roomId}:{date} {json} EX 900 (for each date)
     I->>DB: COMMIT
-    I-->>B: 201 {holdId, expiresAt, pricePerNight, taxRate}
+    I-->>C: 201 {holdId, expiresAt, pricePerNight, taxRate}
 ```
 
 ### Hold Conflict (409)
 
 ```mermaid
 sequenceDiagram
-    participant B as booking_service
+    participant C as cart_service
     participant I as inventory_service
     participant R as Redis
 
-    B->>I: POST /holds {roomId, userId, checkIn, checkOut}
+    C->>I: POST /holds [X-User-Id: uuid] {roomId, checkIn, checkOut}
     I->>R: GET room_hold:{roomId}:{date}
     R-->>I: {"holdId": "...", "userId": "other-user"}
-    I-->>B: 409 ROOM_HELD "Room is currently held by another user"
+    I-->>C: 409 ROOM_HELD "Room is currently held by another user"
 ```
 
 ### Background Cleanup (Expired Holds)

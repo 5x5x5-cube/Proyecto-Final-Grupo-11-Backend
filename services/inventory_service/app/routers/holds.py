@@ -2,10 +2,12 @@ import uuid
 from datetime import date
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
+from ..models import Hold
 from ..redis_client import get_redis
 from ..schemas import CreateHoldRequest, HoldCheckResponse, HoldResponse
 from ..services.hold_service import check_hold, create_hold, get_hold, release_hold
@@ -13,9 +15,21 @@ from ..services.hold_service import check_hold, create_hold, get_hold, release_h
 router = APIRouter(prefix="/holds", tags=["holds"])
 
 
+async def get_user_id(request: Request) -> uuid.UUID:
+    """Extract and validate the X-User-Id header."""
+    header_value = request.headers.get("X-User-Id")
+    if not header_value:
+        raise HTTPException(status_code=401, detail="X-User-Id header is required")
+    try:
+        return uuid.UUID(header_value)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="X-User-Id header must be a valid UUID")
+
+
 @router.post("", response_model=HoldResponse, status_code=201)
 async def create_hold_endpoint(
     request: CreateHoldRequest,
+    user_id: uuid.UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ):
@@ -23,7 +37,7 @@ async def create_hold_endpoint(
         db=db,
         redis=redis,
         room_id=request.room_id,
-        user_id=request.user_id,
+        user_id=user_id,
         check_in=request.check_in,
         check_out=request.check_out,
     )
@@ -76,7 +90,8 @@ async def check_hold_endpoint(
     room_id: uuid.UUID,
     check_in: date = Query(..., alias="checkIn"),
     check_out: date = Query(..., alias="checkOut"),
-    user_id: uuid.UUID = Query(..., alias="userId"),
+    user_id: uuid.UUID = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
 ):
     result = await check_hold(
@@ -86,8 +101,18 @@ async def check_hold_endpoint(
         check_out=check_out,
         user_id=user_id,
     )
+
+    expires_at = None
+    if result.get("hold_id"):
+        hold_result = await db.execute(select(Hold).where(Hold.id == result["hold_id"]))
+        hold_record = hold_result.scalar_one_or_none()
+        if hold_record:
+            expires_at = hold_record.expires_at
+
     return HoldCheckResponse(
         held=result["held"],
         holder_id=result.get("holder_id"),
         hold_id=result.get("hold_id"),
+        same_user=result.get("same_user", False),
+        expires_at=expires_at,
     )

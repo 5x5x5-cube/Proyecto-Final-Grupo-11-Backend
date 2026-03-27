@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -7,10 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 class CreateBookingRequest(BaseModel):
     room_id: uuid.UUID = Field(..., alias="roomId")
     hotel_id: uuid.UUID = Field(..., alias="hotelId")
+    hold_id: uuid.UUID = Field(..., alias="holdId")
     check_in: date = Field(..., alias="checkIn")
     check_out: date = Field(..., alias="checkOut")
     guests: int = Field(..., ge=1, le=10)
-    user_id: uuid.UUID = Field(..., alias="userId")
+    base_price: Decimal = Field(..., alias="basePrice")
+    tax_amount: Decimal = Field(..., alias="taxAmount")
+    service_fee: Decimal = Field(Decimal("0"), alias="serviceFee")
+    total_price: Decimal = Field(..., alias="totalPrice")
 
     model_config = ConfigDict(populate_by_name=True)
 

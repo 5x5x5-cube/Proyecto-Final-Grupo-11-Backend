@@ -1,141 +1,151 @@
+"""Tests for the simplified create_booking service function."""
+
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from decimal import Decimal
+from unittest.mock import AsyncMock
 
-import pytest
-
-from app.exceptions import InventoryServiceError
 from app.schemas import CreateBookingRequest
 from app.services.booking_service import create_booking
 
+# ---------------------------------------------------------------------------
+# Fixed UUIDs for predictability
+# ---------------------------------------------------------------------------
 
-def _make_request():
+ROOM_ID = uuid.UUID("b1000000-0000-0000-0000-000000000001")
+HOTEL_ID = uuid.UUID("a1000000-0000-0000-0000-000000000001")
+USER_ID = uuid.UUID("c1000000-0000-0000-0000-000000000001")
+HOLD_ID = uuid.UUID("d1000000-0000-0000-0000-000000000001")
+
+CHECK_IN = date.today() + timedelta(days=1)
+CHECK_OUT = date.today() + timedelta(days=3)
+
+
+def _make_request(
+    check_in: date = CHECK_IN,
+    check_out: date = CHECK_OUT,
+    guests: int = 2,
+    base_price: Decimal = Decimal("500000"),
+    tax_amount: Decimal = Decimal("95000"),
+    service_fee: Decimal = Decimal("0"),
+    total_price: Decimal = Decimal("595000"),
+) -> CreateBookingRequest:
     return CreateBookingRequest(
-        room_id=uuid.UUID("b1000000-0000-0000-0000-000000000001"),
-        hotel_id=uuid.UUID("a1000000-0000-0000-0000-000000000001"),
-        check_in=date.today() + timedelta(days=1),
-        check_out=date.today() + timedelta(days=3),
-        guests=2,
-        user_id=uuid.UUID("c1000000-0000-0000-0000-000000000001"),
+        room_id=ROOM_ID,
+        hotel_id=HOTEL_ID,
+        hold_id=HOLD_ID,
+        check_in=check_in,
+        check_out=check_out,
+        guests=guests,
+        base_price=base_price,
+        tax_amount=tax_amount,
+        service_fee=service_fee,
+        total_price=total_price,
     )
 
 
-def _make_hold_response(hold_id=None):
-    hid = hold_id or str(uuid.uuid4())
-    return {
-        "id": hid,
-        "room_id": "b1000000-0000-0000-0000-000000000001",
-        "user_id": "c1000000-0000-0000-0000-000000000001",
-        "check_in": (date.today() + timedelta(days=1)).isoformat(),
-        "check_out": (date.today() + timedelta(days=3)).isoformat(),
-        "status": "active",
-        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat(),
-        "price_per_night": 250000,
-        "tax_rate": 0.19,
-        "room_type": "Standard",
-    }
+def _make_fake_db_refresh():
+    """Return a side_effect function that populates auto-generated ORM fields."""
 
-
-@patch("app.services.booking_service.inventory_client")
-@patch("app.services.booking_service.create_booking_lock")
-async def test_create_booking_success(mock_lock_factory, mock_inventory):
-    # Setup mocks — use AsyncMock for async functions
-    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
-    mock_inventory.create_hold = AsyncMock(return_value=_make_hold_response())
-
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    mock_lock_factory.return_value = mock_lock
-
-    db = AsyncMock()
-
-    # Mock db.refresh to populate auto-generated fields on the booking
     async def fake_refresh(obj):
         if obj.id is None:
             obj.id = uuid.uuid4()
         if obj.code is None:
             obj.code = "BK-TEST1234"
+        if obj.currency is None:
+            obj.currency = "COP"
         if obj.created_at is None:
             obj.created_at = datetime.now(timezone.utc)
         if obj.updated_at is None:
             obj.updated_at = datetime.now(timezone.utc)
 
-    db.refresh = AsyncMock(side_effect=fake_refresh)
+    return fake_refresh
 
-    redis = AsyncMock()
+
+async def test_create_booking_success():
+    """create_booking inserts a confirmed booking and returns a BookingResponse."""
+    db = AsyncMock()
+    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
+
     request = _make_request()
+    result = await create_booking(db=db, user_id=USER_ID, request=request)
 
-    result = await create_booking(db=db, redis=redis, request=request)
-
-    assert result.status == "pending"
+    assert result.status == "confirmed"
     assert result.guests == 2
-    assert result.total_price > 0
-    assert result.price_breakdown is not None
-    assert result.price_breakdown.nights == 2
+    assert result.total_price == 595000.0
+    assert result.hold_id == HOLD_ID
+    assert result.user_id == USER_ID
     db.add.assert_called_once()
     db.commit.assert_called_once()
+    db.refresh.assert_called_once()
 
 
-@patch("app.services.booking_service.inventory_client")
-async def test_create_booking_room_held_by_other(mock_inventory):
-    mock_inventory.check_hold = AsyncMock(
-        return_value={
-            "held": True,
-            "holder_id": str(uuid.uuid4()),
-            "hold_id": str(uuid.uuid4()),
-        }
-    )
-
+async def test_create_booking_sets_confirmed_status():
+    """create_booking always sets status to 'confirmed'."""
     db = AsyncMock()
-    redis = AsyncMock()
-    request = _make_request()
+    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
 
-    with pytest.raises(InventoryServiceError, match="being processed"):
-        await create_booking(db=db, redis=redis, request=request)
+    result = await create_booking(db=db, user_id=USER_ID, request=_make_request())
+
+    assert result.status == "confirmed"
 
 
-@patch("app.services.booking_service.inventory_client")
-@patch("app.services.booking_service.create_booking_lock")
-async def test_create_booking_inventory_unavailable(mock_lock_factory, mock_inventory):
-    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
-    mock_inventory.create_hold = AsyncMock(
-        side_effect=InventoryServiceError("Room unavailable", status_code=409)
-    )
-
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    mock_lock_factory.return_value = mock_lock
-
+async def test_create_booking_stores_correct_prices():
+    """create_booking persists all price fields from the request."""
     db = AsyncMock()
-    redis = AsyncMock()
-    request = _make_request()
+    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
 
-    with pytest.raises(InventoryServiceError):
-        await create_booking(db=db, redis=redis, request=request)
+    request = _make_request(
+        base_price=Decimal("750000"),
+        tax_amount=Decimal("142500"),
+        service_fee=Decimal("10000"),
+        total_price=Decimal("902500"),
+    )
+    result = await create_booking(db=db, user_id=USER_ID, request=request)
+
+    assert result.total_price == 902500.0
 
 
-@patch("app.services.booking_service.inventory_client")
-@patch("app.services.booking_service.create_booking_lock")
-async def test_create_booking_db_failure_compensates(mock_lock_factory, mock_inventory):
-    hold_id = str(uuid.uuid4())
-    mock_inventory.check_hold = AsyncMock(return_value={"held": False})
-    mock_inventory.create_hold = AsyncMock(return_value=_make_hold_response(hold_id))
-    mock_inventory.release_hold = AsyncMock()
-
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    mock_lock_factory.return_value = mock_lock
-
+async def test_create_booking_db_failure_propagates():
+    """If the DB commit fails, the exception propagates to the caller."""
     db = AsyncMock()
     db.commit.side_effect = Exception("DB connection lost")
-    redis = AsyncMock()
-    request = _make_request()
+
+    import pytest
 
     with pytest.raises(Exception, match="DB connection lost"):
-        await create_booking(db=db, redis=redis, request=request)
+        await create_booking(db=db, user_id=USER_ID, request=_make_request())
 
-    # Verify compensation was called
-    mock_inventory.release_hold.assert_called_once_with(uuid.UUID(hold_id))
+
+async def test_create_booking_stores_hold_id():
+    """create_booking stores the holdId from the request."""
+    custom_hold_id = uuid.uuid4()
+    db = AsyncMock()
+    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
+
+    request = CreateBookingRequest(
+        room_id=ROOM_ID,
+        hotel_id=HOTEL_ID,
+        hold_id=custom_hold_id,
+        check_in=CHECK_IN,
+        check_out=CHECK_OUT,
+        guests=1,
+        base_price=Decimal("250000"),
+        tax_amount=Decimal("47500"),
+        service_fee=Decimal("0"),
+        total_price=Decimal("297500"),
+    )
+    result = await create_booking(db=db, user_id=USER_ID, request=request)
+
+    assert result.hold_id == custom_hold_id
+
+
+async def test_create_booking_uses_user_id_from_argument():
+    """create_booking uses the user_id argument, not one from the request body."""
+    other_user_id = uuid.uuid4()
+    db = AsyncMock()
+    db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
+
+    result = await create_booking(db=db, user_id=other_user_id, request=_make_request())
+
+    assert result.user_id == other_user_id

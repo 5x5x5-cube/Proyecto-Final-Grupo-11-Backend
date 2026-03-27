@@ -6,6 +6,7 @@ functions are patched at the router import site so we test the full
 router → exception-handler pipeline without touching any real database or
 Redis instance.
 """
+
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
@@ -194,10 +195,10 @@ async def test_create_hold_201(client):
             "/holds",
             json={
                 "roomId": str(ROOM_ID),
-                "userId": str(USER_ID),
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
             },
+            headers={"X-User-Id": str(USER_ID)},
         )
 
     assert response.status_code == 201
@@ -207,6 +208,35 @@ async def test_create_hold_201(client):
     assert body["status"] == "active"
     assert body["price_per_night"] == 250000.0
     assert body["room_type"] == "Standard"
+
+
+async def test_create_hold_401_missing_user_id_header(client):
+    """POST /holds returns 401 when X-User-Id header is missing."""
+    response = await client.post(
+        "/holds",
+        json={
+            "roomId": str(ROOM_ID),
+            "checkIn": "2026-04-01",
+            "checkOut": "2026-04-03",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+async def test_create_hold_401_invalid_user_id_header(client):
+    """POST /holds returns 401 when X-User-Id header is not a valid UUID."""
+    response = await client.post(
+        "/holds",
+        json={
+            "roomId": str(ROOM_ID),
+            "checkIn": "2026-04-01",
+            "checkOut": "2026-04-03",
+        },
+        headers={"X-User-Id": "not-a-uuid"},
+    )
+
+    assert response.status_code == 401
 
 
 async def test_create_hold_409_room_held(client):
@@ -219,10 +249,10 @@ async def test_create_hold_409_room_held(client):
             "/holds",
             json={
                 "roomId": str(ROOM_ID),
-                "userId": str(USER_ID),
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
             },
+            headers={"X-User-Id": str(USER_ID)},
         )
 
     assert response.status_code == 409
@@ -240,10 +270,10 @@ async def test_create_hold_409_room_unavailable(client):
             "/holds",
             json={
                 "roomId": str(ROOM_ID),
-                "userId": str(USER_ID),
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
             },
+            headers={"X-User-Id": str(USER_ID)},
         )
 
     assert response.status_code == 409
@@ -276,7 +306,7 @@ async def test_delete_hold_404(client):
     assert str(HOLD_ID) in body["message"]
 
 
-async def test_check_hold_not_held(client):
+async def test_check_hold_not_held(client, mock_db):
     """GET /holds/check/{room_id} returns held=false when no hold exists."""
     check_result = {"held": False, "holder_id": None, "hold_id": None}
 
@@ -286,8 +316,8 @@ async def test_check_hold_not_held(client):
             params={
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
-                "userId": str(USER_ID),
             },
+            headers={"X-User-Id": str(USER_ID)},
         )
 
     assert response.status_code == 200
@@ -297,7 +327,7 @@ async def test_check_hold_not_held(client):
     assert body["hold_id"] is None
 
 
-async def test_check_hold_held_by_other(client):
+async def test_check_hold_held_by_other(client, mock_db):
     """GET /holds/check/{room_id} returns held=true with holder info when held by another user."""
     check_result = {
         "held": True,
@@ -305,14 +335,20 @@ async def test_check_hold_held_by_other(client):
         "hold_id": HOLD_ID,
     }
 
+    # Mock the DB lookup for expires_at
+    hold_record = make_hold()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = hold_record
+    mock_db.execute.return_value = result_mock
+
     with patch("app.routers.holds.check_hold", new=AsyncMock(return_value=check_result)):
         response = await client.get(
             f"/holds/check/{ROOM_ID}",
             params={
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
-                "userId": str(USER_ID),
             },
+            headers={"X-User-Id": str(USER_ID)},
         )
 
     assert response.status_code == 200
@@ -320,3 +356,46 @@ async def test_check_hold_held_by_other(client):
     assert body["held"] is True
     assert body["holder_id"] == str(OTHER_USER_ID)
     assert body["hold_id"] == str(HOLD_ID)
+
+
+async def test_check_hold_401_missing_user_id_header(client):
+    """GET /holds/check/{room_id} returns 401 when X-User-Id header is missing."""
+    response = await client.get(
+        f"/holds/check/{ROOM_ID}",
+        params={
+            "checkIn": "2026-04-01",
+            "checkOut": "2026-04-03",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+async def test_check_hold_returns_expires_at(client, mock_db):
+    """GET /holds/check/{room_id} includes expires_at in the response when hold is found."""
+    check_result = {
+        "held": True,
+        "holder_id": USER_ID,
+        "hold_id": HOLD_ID,
+        "same_user": True,
+    }
+
+    hold_record = make_hold()
+    result_mock = MagicMock()
+    result_mock.scalar_one_or_none.return_value = hold_record
+    mock_db.execute.return_value = result_mock
+
+    with patch("app.routers.holds.check_hold", new=AsyncMock(return_value=check_result)):
+        response = await client.get(
+            f"/holds/check/{ROOM_ID}",
+            params={
+                "checkIn": "2026-04-01",
+                "checkOut": "2026-04-03",
+            },
+            headers={"X-User-Id": str(USER_ID)},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["held"] is True
+    assert body["expires_at"] is not None
