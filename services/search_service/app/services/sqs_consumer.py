@@ -57,6 +57,20 @@ class SQSConsumer:
                 elif event_type == "deleted":
                     return indexer.delete_room(room_id)
 
+            elif entity_type == "availability":
+                availability = data.get("availability", {})
+                room_id = availability.get("room_id")
+                avail_date = availability.get("date")
+
+                if not room_id or not avail_date:
+                    print("No room_id or date in availability message")
+                    return False
+
+                if event_type in ("created", "updated"):
+                    return indexer.index_availability(room_id, availability)
+                elif event_type == "deleted":
+                    return indexer.delete_availability(room_id, avail_date)
+
             else:
                 print(f"Unknown entity type: {entity_type}")
                 return False

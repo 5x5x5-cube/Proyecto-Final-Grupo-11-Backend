@@ -57,5 +57,6 @@ async def root():
             "search_hotels": "/search/hotels",
             "get_rooms": "/search/hotels/{hotel_id}/rooms",
             "health": "/health",
+            "root": "/"
         },
     }
