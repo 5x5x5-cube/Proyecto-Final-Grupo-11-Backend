@@ -6,6 +6,7 @@ from redis.commands.search.query import Query
 
 from app.config import get_settings
 from app.redis_client import redis_client
+from app.services.redis_indexer import indexer
 
 settings = get_settings()
 
@@ -26,10 +27,6 @@ class SearchService:
         page: int = 1,
         page_size: int = 20,
     ) -> Dict[str, Any]:
-        """
-        Search hotels by city, dates, and number of guests.
-        Returns hotels with available rooms matching criteria.
-        """
         query_parts = []
 
         if city:
@@ -39,9 +36,7 @@ class SearchService:
             query_parts.append(f"@rating:[{min_rating} 5.0]")
 
         query_string = " ".join(query_parts) if query_parts else "*"
-
         offset = (page - 1) * page_size
-
         query = Query(query_string).paging(offset, page_size).return_fields("$")
 
         try:
@@ -52,9 +47,9 @@ class SearchService:
                 hotel_data = json.loads(doc.json)
                 hotel_id = hotel_data.get("id")
 
-                rooms = self._get_available_rooms(hotel_id, guests)
+                rooms = self._get_available_rooms(hotel_id, guests, check_in, check_out)
 
-                if rooms or not guests:
+                if rooms or (not guests and not check_in and not check_out):
                     hotel_data["available_rooms_count"] = len(rooms)
                     hotel_data["min_price"] = (
                         min(r["price_per_night"] for r in rooms) if rooms else None
@@ -92,10 +87,14 @@ class SearchService:
             }
 
     def _get_available_rooms(
-        self, hotel_id: str, min_capacity: Optional[int] = None
+        self,
+        hotel_id: str,
+        min_capacity: Optional[int] = None,
+        check_in: Optional[date] = None,
+        check_out: Optional[date] = None,
     ) -> List[Dict[str, Any]]:
-        """Get available rooms for a hotel"""
-        query_parts = [f"@hotel_id:{{{hotel_id}}}"]
+        escaped_hotel_id = hotel_id.replace("-", "\\-")
+        query_parts = [f"@hotel_id:{{{escaped_hotel_id}}}"]
 
         if min_capacity:
             query_parts.append(f"@capacity:[{min_capacity} +inf]")
@@ -108,6 +107,12 @@ class SearchService:
             rooms = []
             for doc in result.docs:
                 room_data = json.loads(doc.json)
+                room_id = room_data.get("id")
+
+                if check_in and check_out:
+                    if not indexer.is_room_available_for_dates(room_id, check_in, check_out):
+                        continue
+
                 rooms.append(room_data)
             return rooms
         except Exception as e:

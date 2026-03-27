@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     redis_hotel_index: str = "idx:hotels"
     redis_room_index: str = "idx:rooms"
+    redis_availability_index: str = "idx:availability"
 
     aws_region: str = "us-east-1"
     aws_endpoint_url: Optional[str] = "http://localhost:4566"
