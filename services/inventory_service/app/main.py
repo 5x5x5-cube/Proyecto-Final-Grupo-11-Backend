@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .exceptions import HoldNotFoundError, RoomHeldError, RoomNotFoundError, RoomUnavailableError
 from .redis_client import close_redis
-from .routers import holds, rooms
+from .routers import holds, hotels, rooms
 from .tasks.cleanup import cleanup_expired_holds_loop
 
 
@@ -40,6 +40,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(hotels.router)
 app.include_router(rooms.router)
 app.include_router(holds.router)
 

@@ -1,0 +1,16 @@
+[flake8]
+max-line-length = 100
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    .pytest_cache,
+    alembic/versions,
+    tests/__pycache__
+ignore = 
+    E203,
+    W503,
+    E501
+per-file-ignores =
+    __init__.py:F401
