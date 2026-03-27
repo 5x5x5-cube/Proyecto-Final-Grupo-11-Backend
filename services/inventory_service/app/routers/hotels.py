@@ -14,9 +14,7 @@ router = APIRouter(prefix="/hotels", tags=["hotels"])
 
 
 @router.post("/webhook", response_model=HotelResponse, status_code=201)
-async def register_hotel_webhook(
-    hotel_data: HotelCreate, db: AsyncSession = Depends(get_db)
-):
+async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Depends(get_db)):
     """
     Webhook endpoint to register a new hotel from external sources.
     Publishes event to SQS for synchronization with search service.
@@ -54,9 +52,7 @@ async def register_hotel_webhook(
 
 
 @router.get("", response_model=List[HotelResponse])
-async def list_hotels(
-    skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)
-):
+async def list_hotels(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
     """List all hotels"""
     result = await db.execute(select(Hotel).offset(skip).limit(limit))
     return result.scalars().all()
