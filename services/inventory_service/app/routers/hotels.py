@@ -21,9 +21,7 @@ async def register_hotel_webhook(
     Webhook endpoint to register a new hotel from external sources.
     Publishes event to SQS for synchronization with search service.
     """
-    existing = await db.execute(
-        select(Hotel).where(Hotel.name == hotel_data.name)
-    )
+    existing = await db.execute(select(Hotel).where(Hotel.name == hotel_data.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Hotel already exists")
 
