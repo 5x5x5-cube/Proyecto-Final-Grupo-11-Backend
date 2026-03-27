@@ -7,7 +7,7 @@ All DB and Redis interactions are mocked — no real connections are made.
 import json
 import uuid
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

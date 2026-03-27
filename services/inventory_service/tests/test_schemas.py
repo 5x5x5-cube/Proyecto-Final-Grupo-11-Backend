@@ -2,14 +2,9 @@ import uuid
 from datetime import date
 
 from app.schemas import (
-    AvailabilityRangeResponse,
-    AvailabilityResponse,
     CreateHoldRequest,
     ErrorResponse,
     HoldCheckResponse,
-    HoldResponse,
-    HotelResponse,
-    RoomResponse,
 )
 
 

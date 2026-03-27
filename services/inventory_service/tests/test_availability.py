@@ -1,11 +1,11 @@
 import uuid
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.exceptions import RoomNotFoundError, RoomUnavailableError
-from app.services.availability_service import _date_range, check_availability, get_room
+from app.exceptions import RoomNotFoundError
+from app.services.availability_service import _date_range, get_room
 
 
 def test_date_range_single_night():

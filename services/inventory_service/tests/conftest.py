@@ -1,12 +1,11 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from app.models import Availability, Base, Hold, Hotel, Room
+from app.models import Availability, Hold, Hotel, Room
 
 
 @pytest.fixture
