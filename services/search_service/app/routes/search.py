@@ -8,6 +8,20 @@ from app.services.search_service import search_service
 router = APIRouter(prefix="/search", tags=["search"])
 
 
+@router.get("/destinations")
+async def get_destinations():
+    """
+    Retorna la lista de destinos disponibles para el selector de búsqueda.
+    Los destinos se obtienen dinámicamente de los hoteles indexados en Redis,
+    garantizando que solo se muestren ciudades con hospedajes activos.
+    """
+    destinos = search_service.get_destinations()
+    return {
+        "destinations": destinos,
+        "total": len(destinos),
+    }
+
+
 @router.get("/hotels")
 async def search_hotels(
     city: Optional[str] = Query(None, description="City to search in"),

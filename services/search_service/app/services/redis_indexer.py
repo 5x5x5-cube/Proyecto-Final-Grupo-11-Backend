@@ -74,12 +74,18 @@ class RedisIndexer:
             available_quantity = availability_data.get("available_quantity", 0)
 
             key = f"availability:{room_id}:{avail_date}"
-            self.client.json().set(key, "$", {
-                "room_id": room_id,
-                "date": avail_date,
-                "available_quantity": available_quantity,
-            })
-            print(f"Indexed availability: room={room_id} date={avail_date} qty={available_quantity}")
+            self.client.json().set(
+                key,
+                "$",
+                {
+                    "room_id": room_id,
+                    "date": avail_date,
+                    "available_quantity": available_quantity,
+                },
+            )
+            print(
+                f"Indexed availability: room={room_id} date={avail_date} qty={available_quantity}"
+            )
             return True
         except Exception as e:
             print(f"Error indexing availability for room {room_id}: {e}")
@@ -107,9 +113,7 @@ class RedisIndexer:
             print(f"Error deleting availability for room {room_id} date {avail_date}: {e}")
             return False
 
-    def is_room_available_for_dates(
-        self, room_id: str, check_in: date, check_out: date
-    ) -> bool:
+    def is_room_available_for_dates(self, room_id: str, check_in: date, check_out: date) -> bool:
         """
         Verifica si una habitación tiene available_quantity > 0 para TODOS
         los días del rango [check_in, check_out) — check_out no se incluye

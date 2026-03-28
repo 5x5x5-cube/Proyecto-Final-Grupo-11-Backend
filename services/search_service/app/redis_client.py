@@ -76,8 +76,7 @@ class RedisClient:
         schema = (
             TagField("$.room_id", as_name="room_id"),
             TextField("$.date", as_name="date"),
-            NumericField("$.available_quantity",
-                as_name="available_quantity", sortable=True),
+            NumericField("$.available_quantity", as_name="available_quantity", sortable=True),
         )
         definition = IndexDefinition(prefix=["availability:"], index_type=IndexType.JSON)
         self.client.ft(self.availability_index).create_index(schema, definition=definition)

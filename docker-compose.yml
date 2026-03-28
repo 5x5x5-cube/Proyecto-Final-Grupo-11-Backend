@@ -10,10 +10,10 @@ services:
     environment:
       - BOOKING_SERVICE_URL=http://booking-service:8000
       - CART_SERVICE_URL=http://cart-service:8000
+      - SEARCH_SERVICE_URL=http://search-service:8000
       - DEFAULT_USER_ID=c1000000-0000-0000-0000-000000000001
-      # Uncomment as services are implemented:
+      # Descomentar a medida que se implementen los servicios:
       # - AUTH_SERVICE_URL=http://auth-service:8000
-      # - SEARCH_SERVICE_URL=http://search-service:8000
       # - PAYMENT_SERVICE_URL=http://payment-service:8000
       # - REPORTS_SERVICE_URL=http://reports-service:8000
       # - NOTIFICATION_SERVICE_URL=http://notification-service:8000
@@ -21,6 +21,7 @@ services:
     depends_on:
       - booking-service
       - cart-service
+      - search-service
     networks:
       - microservices
 

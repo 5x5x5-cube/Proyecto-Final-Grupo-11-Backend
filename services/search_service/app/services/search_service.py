@@ -120,8 +120,38 @@ class SearchService:
             return []
 
     def get_hotel_rooms(self, hotel_id: str) -> List[Dict[str, Any]]:
-        """Get all rooms for a specific hotel"""
+        """Retorna todas las habitaciones de un hotel específico"""
         return self._get_available_rooms(hotel_id)
+
+    def get_destinations(self) -> List[Dict[str, str]]:
+        """
+        Retorna la lista de destinos únicos disponibles para búsqueda.
+        Los destinos se extraen de los hoteles indexados en Redis,
+        eliminando duplicados y ordenando alfabéticamente por ciudad.
+        """
+        # Traemos hasta 500 hoteles para cubrir el catálogo actual
+        query = Query("*").return_fields("$").paging(0, 500)
+        try:
+            result = self.client.ft(self.hotel_index).search(query)
+            ciudades_vistas: set = set()
+            destinos: List[Dict[str, str]] = []
+
+            for doc in result.docs:
+                hotel_data = json.loads(doc.json)
+                ciudad = hotel_data.get("city", "").strip()
+                pais = hotel_data.get("country", "").strip()
+
+                # Solo agregamos ciudades únicas con nombre válido
+                if ciudad and ciudad not in ciudades_vistas:
+                    ciudades_vistas.add(ciudad)
+                    destinos.append({"city": ciudad, "country": pais})
+
+            destinos.sort(key=lambda d: d["city"])
+            return destinos
+
+        except Exception as e:
+            print(f"Error obteniendo destinos: {e}")
+            return []
 
 
 search_service = SearchService()
