@@ -78,11 +78,24 @@ async def search_hotels(
     return result
 
 
+@router.get("/hotels/{hotel_id}")
+async def get_hotel_detail(hotel_id: str):
+    """
+    Retorna el detalle completo de un hotel por su ID.
+    Se usa en la pantalla de detalle de propiedad del móvil (HU2.2M).
+    El hotel se busca directamente por key en Redis (hotel:{hotel_id}).
+    """
+    hotel = search_service.get_hotel_by_id(hotel_id)
+    if hotel is None:
+        raise HTTPException(status_code=404, detail=f"Hotel '{hotel_id}' no encontrado")
+    return hotel
+
+
 @router.get("/hotels/{hotel_id}/rooms")
 async def get_hotel_rooms(hotel_id: str):
     """
-    Get available rooms for a specific hotel.
-    This endpoint is called when user clicks 'Ver habitaciones' button.
+    Retorna las habitaciones disponibles de un hotel específico.
+    Se usa cuando el usuario presiona 'Ver habitaciones' en la pantalla de detalle.
     """
     rooms = search_service.get_hotel_rooms(hotel_id)
 
