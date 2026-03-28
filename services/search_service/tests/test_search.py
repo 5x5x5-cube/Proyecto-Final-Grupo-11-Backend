@@ -1002,3 +1002,122 @@ def test_get_destinations_service_maneja_error_redis(mock_redis):
         resultado = servicio.get_destinations()
 
         assert resultado == []
+
+
+# ─── DETALLE DE HOTEL ─────────────────────────────────────────────────────────
+
+
+def test_get_hotel_detail_retorna_hotel_existente(mock_redis, mock_search_service):
+    """El endpoint retorna los datos del hotel cuando existe en Redis"""
+    hotel_data = {
+        "id": "hotel-001",
+        "name": "Hotel El Caribe",
+        "city": "Cartagena",
+        "country": "Colombia",
+        "rating": 4.5,
+        "description": "Hotel frente al mar",
+    }
+    mock_search_service.get_hotel_by_id.return_value = hotel_data
+    client = TestClient(app)
+    response = client.get("/search/hotels/hotel-001")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == "hotel-001"
+    assert data["name"] == "Hotel El Caribe"
+
+
+def test_get_hotel_detail_retorna_404_si_no_existe(mock_redis, mock_search_service):
+    """El endpoint retorna 404 cuando el hotel no existe en Redis"""
+    mock_search_service.get_hotel_by_id.return_value = None
+    client = TestClient(app)
+    response = client.get("/search/hotels/hotel-inexistente")
+    assert response.status_code == 404
+    assert "no encontrado" in response.json()["detail"].lower()
+
+
+def test_get_hotel_detail_llama_al_servicio_con_id_correcto(mock_redis, mock_search_service):
+    """El router pasa el hotel_id correcto al servicio"""
+    mock_search_service.get_hotel_by_id.return_value = {"id": "abc-123"}
+    client = TestClient(app)
+    client.get("/search/hotels/abc-123")
+    mock_search_service.get_hotel_by_id.assert_called_once_with("abc-123")
+
+
+def test_get_hotel_detail_no_interfiere_con_rooms(mock_redis, mock_search_service):
+    """GET /hotels/{id} y GET /hotels/{id}/rooms son rutas independientes"""
+    mock_search_service.get_hotel_by_id.return_value = {"id": "hotel-001"}
+    mock_search_service.get_hotel_rooms.return_value = [{"id": "room-001"}]
+    client = TestClient(app)
+
+    resp_detail = client.get("/search/hotels/hotel-001")
+    resp_rooms = client.get("/search/hotels/hotel-001/rooms")
+
+    assert resp_detail.status_code == 200
+    assert resp_rooms.status_code == 200
+    # Cada endpoint llama a su propio método del servicio
+    mock_search_service.get_hotel_by_id.assert_called_once()
+    mock_search_service.get_hotel_rooms.assert_called_once()
+
+
+def test_get_hotel_by_id_lee_desde_redis(mock_redis):
+    """get_hotel_by_id lee el JSON del hotel desde la key hotel:{id} en Redis"""
+    with patch("app.services.search_service.redis_client") as mock_rc:
+        mock_client = MagicMock()
+        mock_rc.get_client.return_value = mock_client
+
+        hotel_data = {"id": "hotel-001", "name": "Test Hotel", "city": "Bogotá"}
+        # json().get con "$" retorna lista con el objeto raíz
+        mock_client.json().get.return_value = [hotel_data]
+
+        from app.services.search_service import SearchService
+
+        servicio = SearchService()
+        resultado = servicio.get_hotel_by_id("hotel-001")
+
+        mock_client.json().get.assert_called_once_with("hotel:hotel-001", "$")
+        assert resultado == hotel_data
+
+
+def test_get_hotel_by_id_retorna_none_si_key_no_existe(mock_redis):
+    """get_hotel_by_id retorna None cuando la key no existe en Redis"""
+    with patch("app.services.search_service.redis_client") as mock_rc:
+        mock_client = MagicMock()
+        mock_rc.get_client.return_value = mock_client
+        mock_client.json().get.return_value = None
+
+        from app.services.search_service import SearchService
+
+        servicio = SearchService()
+        resultado = servicio.get_hotel_by_id("hotel-inexistente")
+
+        assert resultado is None
+
+
+def test_get_hotel_by_id_retorna_none_si_lista_vacia(mock_redis):
+    """get_hotel_by_id retorna None cuando Redis retorna lista vacía"""
+    with patch("app.services.search_service.redis_client") as mock_rc:
+        mock_client = MagicMock()
+        mock_rc.get_client.return_value = mock_client
+        mock_client.json().get.return_value = []
+
+        from app.services.search_service import SearchService
+
+        servicio = SearchService()
+        resultado = servicio.get_hotel_by_id("hotel-001")
+
+        assert resultado is None
+
+
+def test_get_hotel_by_id_retorna_none_ante_error_redis(mock_redis):
+    """get_hotel_by_id retorna None si Redis lanza una excepción"""
+    with patch("app.services.search_service.redis_client") as mock_rc:
+        mock_client = MagicMock()
+        mock_rc.get_client.return_value = mock_client
+        mock_client.json().get.side_effect = Exception("Redis no disponible")
+
+        from app.services.search_service import SearchService
+
+        servicio = SearchService()
+        resultado = servicio.get_hotel_by_id("hotel-001")
+
+        assert resultado is None

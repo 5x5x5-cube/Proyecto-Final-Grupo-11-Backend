@@ -123,6 +123,23 @@ class SearchService:
         """Retorna todas las habitaciones de un hotel específico"""
         return self._get_available_rooms(hotel_id)
 
+    def get_hotel_by_id(self, hotel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retorna el detalle de un hotel buscándolo directamente por su key en Redis.
+        Los hoteles se almacenan con key hotel:{id} vía el redis_indexer.
+        Retorna None si el hotel no existe en el índice.
+        """
+        key = f"hotel:{hotel_id}"
+        try:
+            # json().get con "$" retorna una lista con el objeto raíz, o None si no existe
+            resultado = self.client.json().get(key, "$")
+            if not resultado:
+                return None
+            return resultado[0]
+        except Exception as e:
+            print(f"Error obteniendo hotel {hotel_id}: {e}")
+            return None
+
     def get_destinations(self) -> List[Dict[str, str]]:
         """
         Retorna la lista de destinos únicos disponibles para búsqueda.
