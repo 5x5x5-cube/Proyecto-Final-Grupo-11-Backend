@@ -40,6 +40,7 @@ target-version = ['py311']
 [tool.isort]
 profile = "black"
 line_length = 100
+known_first_party = ["app"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
