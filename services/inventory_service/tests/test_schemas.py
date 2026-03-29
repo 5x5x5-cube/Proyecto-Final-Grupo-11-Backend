@@ -1,11 +1,7 @@
 import uuid
 from datetime import date
 
-from app.schemas import (
-    CreateHoldRequest,
-    ErrorResponse,
-    HoldCheckResponse,
-)
+from app.schemas import CreateHoldRequest, ErrorResponse, HoldCheckResponse
 
 
 def test_create_hold_request_from_camel_case():
