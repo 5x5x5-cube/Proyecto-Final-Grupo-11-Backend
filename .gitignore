@@ -29,6 +29,7 @@ env/
 
 # Poetry
 poetry.lock
+poetry.toml
 
 # Testing
 .pytest_cache/
