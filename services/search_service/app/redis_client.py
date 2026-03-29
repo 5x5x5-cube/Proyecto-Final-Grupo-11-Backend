@@ -1,6 +1,10 @@
 import redis
 from redis.commands.search.field import NumericField, TagField, TextField
-from redis.commands.search.index_definition import IndexDefinition, IndexType
+
+try:
+    from redis.commands.search.indexDefinition import IndexDefinition, IndexType  # redis <7
+except ModuleNotFoundError:
+    from redis.commands.search.index_definition import IndexDefinition, IndexType  # redis >=7
 
 from app.config import get_settings
 
