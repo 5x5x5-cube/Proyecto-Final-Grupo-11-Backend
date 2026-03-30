@@ -1,12 +1,19 @@
-"""Core booking creation — simple DB insert."""
+"""Core booking business logic."""
 
 import uuid
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..exceptions import BookingAlreadyProcessedError, BookingNotFoundError
 from ..models import Booking
-from ..schemas import BookingResponse, CreateBookingRequest, PriceBreakdown
+from ..schemas import (
+    BookingResponse,
+    CreateBookingRequest,
+    PriceBreakdown,
+    UpdateBookingStatusRequest,
+)
 
 
 def build_booking_response(
@@ -58,6 +65,29 @@ async def create_booking(
         total_price=request.total_price,
     )
     db.add(booking)
+    await db.commit()
+    await db.refresh(booking)
+    return build_booking_response(booking)
+
+
+async def update_booking_status(
+    db: AsyncSession,
+    booking_id: uuid.UUID,
+    hotel_id: uuid.UUID,
+    request: UpdateBookingStatusRequest,
+) -> BookingResponse:
+    """Confirm or reject a pending booking for a given hotel."""
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise BookingNotFoundError(str(booking_id))
+    if booking.hotel_id != hotel_id:
+        raise PermissionError("Booking does not belong to this hotel")
+    if booking.status != "pending":
+        raise BookingAlreadyProcessedError(str(booking_id), booking.status)
+
+    booking.status = "confirmed" if request.action == "confirm" else "rejected"
+
     await db.commit()
     await db.refresh(booking)
     return build_booking_response(booking)
