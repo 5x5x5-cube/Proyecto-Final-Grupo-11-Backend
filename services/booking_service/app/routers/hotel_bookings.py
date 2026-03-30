@@ -21,6 +21,16 @@ def get_hotel_id(request: Request) -> uuid.UUID:
         raise HTTPException(status_code=401, detail="X-Hotel-Id header is not a valid UUID")
 
 
+@router.get("")
+async def list_hotel_bookings():
+    raise HTTPException(status_code=501, detail="Not implemented yet")
+
+
+@router.get("/{booking_id}")
+async def get_hotel_booking(booking_id: uuid.UUID):
+    raise HTTPException(status_code=501, detail="Not implemented yet")
+
+
 @router.post("/{booking_id}/status", response_model=BookingResponse)
 async def update_status(
     booking_id: uuid.UUID,

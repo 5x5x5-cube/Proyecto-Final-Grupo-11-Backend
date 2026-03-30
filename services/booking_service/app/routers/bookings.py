@@ -33,34 +33,6 @@ async def create_booking_endpoint(
     return await create_booking(db=db, user_id=user_id, request=request)
 
 
-@router.get("/{booking_id}", response_model=BookingResponse)
-async def get_booking_detail(
-    booking_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(select(Booking).where(Booking.id == booking_id))
-    booking = result.scalar_one_or_none()
-    if not booking:
-        raise BookingNotFoundError(str(booking_id))
-    return BookingResponse(
-        id=booking.id,
-        code=booking.code,
-        userId=booking.user_id,
-        hotelId=booking.hotel_id,
-        roomId=booking.room_id,
-        holdId=booking.hold_id,
-        checkIn=booking.check_in,
-        checkOut=booking.check_out,
-        guests=booking.guests,
-        status=booking.status,
-        totalPrice=float(booking.total_price),
-        currency=booking.currency,
-        priceBreakdown=None,
-        holdExpiresAt=None,
-        createdAt=booking.created_at,
-    )
-
-
 @router.get("", response_model=BookingListResponse)
 async def list_bookings(
     user_id: uuid.UUID = Depends(get_user_id),
@@ -109,4 +81,32 @@ async def list_bookings(
         total=total,
         page=page,
         limit=limit,
+    )
+
+
+@router.get("/{booking_id}", response_model=BookingResponse)
+async def get_booking_detail(
+    booking_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise BookingNotFoundError(str(booking_id))
+    return BookingResponse(
+        id=booking.id,
+        code=booking.code,
+        userId=booking.user_id,
+        hotelId=booking.hotel_id,
+        roomId=booking.room_id,
+        holdId=booking.hold_id,
+        checkIn=booking.check_in,
+        checkOut=booking.check_out,
+        guests=booking.guests,
+        status=booking.status,
+        totalPrice=float(booking.total_price),
+        currency=booking.currency,
+        priceBreakdown=None,
+        holdExpiresAt=None,
+        createdAt=booking.created_at,
     )
