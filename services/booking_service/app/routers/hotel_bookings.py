@@ -27,7 +27,7 @@ async def list_hotel_bookings():
 
 
 @router.get("/{booking_id}")
-async def get_hotel_booking(booking_id: str):
+async def get_hotel_booking(booking_id: uuid.UUID):
     raise HTTPException(status_code=501, detail="Not implemented yet")
 
 
