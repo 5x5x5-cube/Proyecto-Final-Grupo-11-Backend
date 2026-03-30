@@ -59,6 +59,10 @@ class BookingListResponse(BaseModel):
     limit: int
 
 
+class UpdateBookingStatusRequest(BaseModel):
+    action: str = Field(..., pattern="^(confirm|reject)$")
+
+
 class ErrorResponse(BaseModel):
     code: str
     message: str

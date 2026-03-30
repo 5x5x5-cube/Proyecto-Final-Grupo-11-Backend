@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     notification_service_url: str = ""
     monitor_service_url: str = ""
     default_user_id: str = ""  # Injected as X-User-Id when no auth service exists
+    default_hotel_id: str = ""  # Injected as X-Hotel-Id when no auth service exists
 
     model_config = SettingsConfigDict(env_file=".env")
 

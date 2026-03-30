@@ -4,8 +4,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .exceptions import BookingNotFoundError
-from .routers import bookings
+from .exceptions import BookingAlreadyProcessedError, BookingNotFoundError
+from .routers import bookings, hotel_bookings
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(hotel_bookings.router)
 app.include_router(bookings.router)
 
 
@@ -39,6 +40,14 @@ async def booking_not_found_handler(request: Request, exc: BookingNotFoundError)
     return JSONResponse(
         status_code=404,
         content={"code": "BOOKING_NOT_FOUND", "message": str(exc)},
+    )
+
+
+@app.exception_handler(BookingAlreadyProcessedError)
+async def booking_already_processed_handler(request: Request, exc: BookingAlreadyProcessedError):
+    return JSONResponse(
+        status_code=409,
+        content={"code": "BOOKING_ALREADY_PROCESSED", "message": str(exc)},
     )
 
 
