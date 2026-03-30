@@ -37,7 +37,7 @@ def test_search_hotels_endpoint_exists(mock_redis, mock_search_service):
         "filters": {},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels")
+    response = client.get("/api/v1/search/hotels")
     assert response.status_code == 200
     data = response.json()
     assert "results" in data
@@ -55,7 +55,7 @@ def test_search_no_results_returns_message(mock_redis, mock_search_service):
         "filters": {},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels?city=CiudadInexistente")
+    response = client.get("/api/v1/search/hotels?city=CiudadInexistente")
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 0
@@ -76,7 +76,7 @@ def test_search_with_city_filter(mock_redis, mock_search_service):
         "filters": {"city": "Bogota"},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels?city=Bogota")
+    response = client.get("/api/v1/search/hotels?city=Bogota")
     assert response.status_code == 200
     mock_search_service.search_hotels.assert_called_once()
     call_kwargs = mock_search_service.search_hotels.call_args.kwargs
@@ -94,7 +94,7 @@ def test_search_with_guests_filter(mock_redis, mock_search_service):
         "filters": {"guests": 2},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels?guests=2")
+    response = client.get("/api/v1/search/hotels?guests=2")
     assert response.status_code == 200
     call_kwargs = mock_search_service.search_hotels.call_args.kwargs
     assert call_kwargs["guests"] == 2
@@ -113,7 +113,7 @@ def test_search_with_dates_filter(mock_redis, mock_search_service):
     check_in = date.today() + timedelta(days=1)
     check_out = date.today() + timedelta(days=3)
     client = TestClient(app)
-    response = client.get(f"/search/hotels?check_in={check_in}&check_out={check_out}")
+    response = client.get(f"/api/v1/search/hotels?check_in={check_in}&check_out={check_out}")
     assert response.status_code == 200
     call_kwargs = mock_search_service.search_hotels.call_args.kwargs
     assert call_kwargs["check_in"] == check_in
@@ -131,7 +131,7 @@ def test_search_with_min_rating_filter(mock_redis, mock_search_service):
         "filters": {"min_rating": 4.0},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels?min_rating=4.0")
+    response = client.get("/api/v1/search/hotels?min_rating=4.0")
     assert response.status_code == 200
     call_kwargs = mock_search_service.search_hotels.call_args.kwargs
     assert call_kwargs["min_rating"] == 4.0
@@ -148,7 +148,7 @@ def test_search_with_pagination(mock_redis, mock_search_service):
         "filters": {},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels?page=2&page_size=10")
+    response = client.get("/api/v1/search/hotels?page=2&page_size=10")
     assert response.status_code == 200
     call_kwargs = mock_search_service.search_hotels.call_args.kwargs
     assert call_kwargs["page"] == 2
@@ -161,7 +161,7 @@ def test_search_with_pagination(mock_redis, mock_search_service):
 def test_checkout_before_checkin_returns_400(mock_redis):
     """check_out anterior a check_in debe retornar 400"""
     client = TestClient(app)
-    response = client.get("/search/hotels?check_in=2026-06-10&check_out=2026-06-05")
+    response = client.get("/api/v1/search/hotels?check_in=2026-06-10&check_out=2026-06-05")
     assert response.status_code == 400
     assert "check-out" in response.json()["detail"].lower()
 
@@ -169,7 +169,7 @@ def test_checkout_before_checkin_returns_400(mock_redis):
 def test_checkin_in_past_returns_400(mock_redis):
     """check_in en el pasado debe retornar 400"""
     client = TestClient(app)
-    response = client.get("/search/hotels?check_in=2024-01-01&check_out=2024-01-05")
+    response = client.get("/api/v1/search/hotels?check_in=2024-01-01&check_out=2024-01-05")
     assert response.status_code == 400
     assert "past" in response.json()["detail"].lower()
 
@@ -177,14 +177,14 @@ def test_checkin_in_past_returns_400(mock_redis):
 def test_guests_zero_returns_400(mock_redis):
     """Número de huéspedes igual a 0 debe retornar 400 o 422"""
     client = TestClient(app)
-    response = client.get("/search/hotels?guests=0")
+    response = client.get("/api/v1/search/hotels?guests=0")
     assert response.status_code in (400, 422)
 
 
 def test_guests_negative_returns_400(mock_redis):
     """Número de huéspedes negativo debe retornar 422"""
     client = TestClient(app)
-    response = client.get("/search/hotels?guests=-1")
+    response = client.get("/api/v1/search/hotels?guests=-1")
     assert response.status_code == 422
 
 
@@ -192,7 +192,7 @@ def test_checkin_equals_checkout_returns_400(mock_redis):
     """check_in igual a check_out debe retornar 400"""
     future_date = date.today() + timedelta(days=5)
     client = TestClient(app)
-    response = client.get(f"/search/hotels?check_in={future_date}&check_out={future_date}")
+    response = client.get(f"/api/v1/search/hotels?check_in={future_date}&check_out={future_date}")
     assert response.status_code == 400
 
 
@@ -799,7 +799,7 @@ def test_search_returns_results_with_hotels(mock_redis, mock_search_service):
         "filters": {},
     }
     client = TestClient(app)
-    response = client.get("/search/hotels")
+    response = client.get("/api/v1/search/hotels")
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 1
@@ -812,7 +812,7 @@ def test_get_hotel_rooms_with_results(mock_redis, mock_search_service):
         {"id": "room-001", "hotel_id": "hotel-001", "price_per_night": 150000}
     ]
     client = TestClient(app)
-    response = client.get("/search/hotels/hotel-001/rooms")
+    response = client.get("/api/v1/search/hotels/hotel-001/rooms")
     assert response.status_code == 200
     data = response.json()
     assert data["hotel_id"] == "hotel-001"
@@ -824,7 +824,7 @@ def test_get_hotel_rooms_no_results(mock_redis, mock_search_service):
     """get_hotel_rooms retorna mensaje cuando no hay habitaciones"""
     mock_search_service.get_hotel_rooms.return_value = []
     client = TestClient(app)
-    response = client.get("/search/hotels/hotel-001/rooms")
+    response = client.get("/api/v1/search/hotels/hotel-001/rooms")
     assert response.status_code == 200
     data = response.json()
     assert data["rooms"] == []
@@ -838,7 +838,7 @@ def test_get_destinations_endpoint_existe(mock_redis, mock_search_service):
     """El endpoint /search/destinations responde con 200"""
     mock_search_service.get_destinations.return_value = []
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     assert response.status_code == 200
 
 
@@ -846,7 +846,7 @@ def test_get_destinations_estructura_respuesta(mock_redis, mock_search_service):
     """La respuesta incluye los campos 'destinations' y 'total'"""
     mock_search_service.get_destinations.return_value = []
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     data = response.json()
     assert "destinations" in data
     assert "total" in data
@@ -859,7 +859,7 @@ def test_get_destinations_retorna_lista_de_ciudades(mock_redis, mock_search_serv
         {"city": "Cartagena", "country": "Colombia"},
     ]
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 2
@@ -872,7 +872,7 @@ def test_get_destinations_cada_destino_tiene_city_y_country(mock_redis, mock_sea
         {"city": "Medellín", "country": "Colombia"},
     ]
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     destino = response.json()["destinations"][0]
     assert "city" in destino
     assert "country" in destino
@@ -882,7 +882,7 @@ def test_get_destinations_lista_vacia_cuando_no_hay_hoteles(mock_redis, mock_sea
     """Retorna lista vacía cuando no hay hoteles indexados en Redis"""
     mock_search_service.get_destinations.return_value = []
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     data = response.json()
     assert data["destinations"] == []
     assert data["total"] == 0
@@ -897,7 +897,7 @@ def test_get_destinations_total_coincide_con_lista(mock_redis, mock_search_servi
     ]
     mock_search_service.get_destinations.return_value = destinos
     client = TestClient(app)
-    response = client.get("/search/destinations")
+    response = client.get("/api/v1/search/destinations")
     data = response.json()
     assert data["total"] == len(data["destinations"])
 
@@ -906,7 +906,7 @@ def test_get_destinations_servicio_llama_get_destinations(mock_redis, mock_searc
     """El router llama exactamente una vez a search_service.get_destinations()"""
     mock_search_service.get_destinations.return_value = []
     client = TestClient(app)
-    client.get("/search/destinations")
+    client.get("/api/v1/search/destinations")
     mock_search_service.get_destinations.assert_called_once()
 
 
@@ -1019,7 +1019,7 @@ def test_get_hotel_detail_retorna_hotel_existente(mock_redis, mock_search_servic
     }
     mock_search_service.get_hotel_by_id.return_value = hotel_data
     client = TestClient(app)
-    response = client.get("/search/hotels/hotel-001")
+    response = client.get("/api/v1/search/hotels/hotel-001")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "hotel-001"
@@ -1030,7 +1030,7 @@ def test_get_hotel_detail_retorna_404_si_no_existe(mock_redis, mock_search_servi
     """El endpoint retorna 404 cuando el hotel no existe en Redis"""
     mock_search_service.get_hotel_by_id.return_value = None
     client = TestClient(app)
-    response = client.get("/search/hotels/hotel-inexistente")
+    response = client.get("/api/v1/search/hotels/hotel-inexistente")
     assert response.status_code == 404
     assert "no encontrado" in response.json()["detail"].lower()
 
@@ -1039,7 +1039,7 @@ def test_get_hotel_detail_llama_al_servicio_con_id_correcto(mock_redis, mock_sea
     """El router pasa el hotel_id correcto al servicio"""
     mock_search_service.get_hotel_by_id.return_value = {"id": "abc-123"}
     client = TestClient(app)
-    client.get("/search/hotels/abc-123")
+    client.get("/api/v1/search/hotels/abc-123")
     mock_search_service.get_hotel_by_id.assert_called_once_with("abc-123")
 
 
@@ -1049,8 +1049,8 @@ def test_get_hotel_detail_no_interfiere_con_rooms(mock_redis, mock_search_servic
     mock_search_service.get_hotel_rooms.return_value = [{"id": "room-001"}]
     client = TestClient(app)
 
-    resp_detail = client.get("/search/hotels/hotel-001")
-    resp_rooms = client.get("/search/hotels/hotel-001/rooms")
+    resp_detail = client.get("/api/v1/search/hotels/hotel-001")
+    resp_rooms = client.get("/api/v1/search/hotels/hotel-001/rooms")
 
     assert resp_detail.status_code == 200
     assert resp_rooms.status_code == 200

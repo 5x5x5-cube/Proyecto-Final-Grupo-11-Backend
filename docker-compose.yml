@@ -30,7 +30,7 @@ services:
       context: ./services/auth_service
       dockerfile: Dockerfile
     ports:
-      - "8001:8000"
+      - "8011:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:

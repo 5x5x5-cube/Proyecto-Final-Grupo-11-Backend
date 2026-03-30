@@ -34,4 +34,4 @@ def test_root(mock_redis):
 def test_search_hotels_endpoint_exists(mock_redis):
     """Test that search hotels endpoint is registered"""
     routes = [route.path for route in app.routes]
-    assert "/search/hotels" in routes
+    assert "/api/v1/search/hotels" in routes
