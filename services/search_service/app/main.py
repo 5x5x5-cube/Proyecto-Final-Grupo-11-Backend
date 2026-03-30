@@ -54,9 +54,9 @@ async def root():
         "message": "Hotel Search Service",
         "version": settings.app_version,
         "endpoints": {
-            "get_destinations": "/search/destinations",
-            "search_hotels": "/search/hotels",
-            "get_rooms": "/search/hotels/{hotel_id}/rooms",
+            "get_destinations": "/api/v1/search/destinations",
+            "search_hotels": "/api/v1/search/hotels",
+            "get_rooms": "/api/v1/search/hotels/{hotel_id}/rooms",
             "health": "/health",
             "root": "/",
         },
