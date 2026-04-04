@@ -99,7 +99,11 @@ async def list_hotel_bookings(
     total = count_result.scalar_one()
 
     # Conteo por estado para el resumen
-    summary_query = select(Booking.status, func.count()).where(Booking.hotel_id == hotel_id).group_by(Booking.status)
+    summary_query = (
+        select(Booking.status, func.count())
+        .where(Booking.hotel_id == hotel_id)
+        .group_by(Booking.status)
+    )
     summary_result = await db.execute(summary_query)
     counts: dict[str, int] = {row[0]: row[1] for row in summary_result.all()}
     summary = HotelBookingSummary(
