@@ -59,6 +59,21 @@ class BookingListResponse(BaseModel):
     limit: int
 
 
+class HotelBookingSummary(BaseModel):
+    total: int
+    confirmed: int
+    pending: int
+    cancelled: int
+
+
+class HotelBookingListResponse(BaseModel):
+    data: list[BookingResponse]
+    total: int
+    page: int
+    limit: int
+    summary: HotelBookingSummary
+
+
 class UpdateBookingStatusRequest(BaseModel):
     action: str = Field(..., pattern="^(confirm|reject)$")
 
