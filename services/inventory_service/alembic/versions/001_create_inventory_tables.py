@@ -26,6 +26,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text),
         sa.Column("city", sa.String(100)),
         sa.Column("country", sa.String(100)),
+        sa.Column("address", sa.String(255)),
         sa.Column("rating", sa.DECIMAL(2, 1)),
         sa.Column("status", sa.String(20), server_default="active"),
         sa.Column(

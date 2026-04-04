@@ -94,4 +94,21 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    return {"service": "inventory-service", "message": "Inventory Management Service"}
+    return {
+        "service": "inventory-service",
+        "message": "Inventory Management Service",
+        "version": "0.1.0",
+        "endpoints": {
+            "register_hotel": "POST /hotels/webhook",
+            "list_hotels": "GET /hotels",
+            "get_hotel": "GET /hotels/{hotel_id}",
+            "get_room": "GET /rooms/{room_id}",
+            "get_room_hotel": "GET /rooms/{room_id}/hotel",
+            "get_room_availability": "GET /rooms/{room_id}/availability?checkIn=&checkOut=",
+            "create_hold": "POST /holds",
+            "release_hold": "DELETE /holds/{hold_id}",
+            "get_hold": "GET /holds/{hold_id}",
+            "check_hold": "GET /holds/check/{room_id}?checkIn=&checkOut=",
+            "health": "GET /health",
+        },
+    }
