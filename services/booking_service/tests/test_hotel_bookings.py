@@ -325,9 +325,7 @@ async def test_get_hotel_booking_200():
     app.dependency_overrides[get_db] = lambda: _mock_db(booking)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
-            resp = await client.get(
-                f"/api/v1/bookings/hotel/{BOOKING_ID}", headers=HOTEL_HEADER
-            )
+            resp = await client.get(f"/api/v1/bookings/hotel/{BOOKING_ID}", headers=HOTEL_HEADER)
     finally:
         app.dependency_overrides.clear()
 
@@ -341,9 +339,7 @@ async def test_get_hotel_booking_not_found_404():
     app.dependency_overrides[get_db] = lambda: _mock_db(None)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url=BASE_URL) as client:
-            resp = await client.get(
-                f"/api/v1/bookings/hotel/{BOOKING_ID}", headers=HOTEL_HEADER
-            )
+            resp = await client.get(f"/api/v1/bookings/hotel/{BOOKING_ID}", headers=HOTEL_HEADER)
     finally:
         app.dependency_overrides.clear()
 
