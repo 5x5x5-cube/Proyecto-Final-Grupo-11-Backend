@@ -1,9 +1,9 @@
 """Core booking business logic."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..exceptions import BookingAlreadyProcessedError, BookingNotFoundError
@@ -11,6 +11,8 @@ from ..models import Booking
 from ..schemas import (
     BookingResponse,
     CreateBookingRequest,
+    HotelBookingListResponse,
+    HotelBookingSummary,
     PriceBreakdown,
     UpdateBookingStatusRequest,
 )
@@ -67,6 +69,77 @@ async def create_booking(
     db.add(booking)
     await db.commit()
     await db.refresh(booking)
+    return build_booking_response(booking)
+
+
+async def list_hotel_bookings(
+    db: AsyncSession,
+    hotel_id: uuid.UUID,
+    status: str | None,
+    check_in_from: date | None,
+    check_in_to: date | None,
+    code: str | None,
+    page: int,
+    limit: int,
+) -> HotelBookingListResponse:
+    """List bookings for a hotel with optional filters and pagination."""
+    base_query = select(Booking).where(Booking.hotel_id == hotel_id)
+
+    if status:
+        base_query = base_query.where(Booking.status == status)
+    if check_in_from:
+        base_query = base_query.where(Booking.check_in >= check_in_from)
+    if check_in_to:
+        base_query = base_query.where(Booking.check_in <= check_in_to)
+    if code:
+        base_query = base_query.where(Booking.code.ilike(f"%{code}%"))
+
+    # Conteo total para paginación
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar_one()
+
+    # Conteo por estado para el resumen
+    summary_query = (
+        select(Booking.status, func.count())
+        .where(Booking.hotel_id == hotel_id)
+        .group_by(Booking.status)
+    )
+    summary_result = await db.execute(summary_query)
+    counts: dict[str, int] = {row[0]: row[1] for row in summary_result.all()}
+    summary = HotelBookingSummary(
+        total=sum(counts.values()),
+        confirmed=counts.get("confirmed", 0),
+        pending=counts.get("pending", 0),
+        cancelled=counts.get("cancelled", 0),
+    )
+
+    # Página de resultados
+    offset = (page - 1) * limit
+    paged_query = base_query.order_by(Booking.created_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(paged_query)
+    bookings = result.scalars().all()
+
+    return HotelBookingListResponse(
+        data=[build_booking_response(b) for b in bookings],
+        total=total,
+        page=page,
+        limit=limit,
+        summary=summary,
+    )
+
+
+async def get_hotel_booking(
+    db: AsyncSession,
+    hotel_id: uuid.UUID,
+    booking_id: uuid.UUID,
+) -> BookingResponse:
+    """Get a single booking scoped to a hotel."""
+    result = await db.execute(
+        select(Booking).where(Booking.id == booking_id, Booking.hotel_id == hotel_id)
+    )
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise BookingNotFoundError(str(booking_id))
     return build_booking_response(booking)
 
 
