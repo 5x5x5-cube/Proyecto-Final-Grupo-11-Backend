@@ -18,6 +18,7 @@ class Hotel(Base):
     description: Mapped[str | None] = mapped_column(Text)
     city: Mapped[str | None] = mapped_column(String(100))
     country: Mapped[str | None] = mapped_column(String(100))
+    address: Mapped[str | None] = mapped_column(String(255))
     rating: Mapped[float | None] = mapped_column(DECIMAL(2, 1))
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(

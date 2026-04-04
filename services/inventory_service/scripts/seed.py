@@ -9,6 +9,31 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.models import Availability, Base, Hotel, Room
+from app.services.sqs_publisher import sqs_publisher
+
+
+async def wait_for_sqs(retries: int = 10, delay: int = 3) -> bool:
+    """Wait until the SQS queue is available."""
+    import boto3
+    from botocore.exceptions import ClientError
+
+    client = boto3.client(
+        "sqs",
+        region_name=settings.aws_region,
+        endpoint_url=settings.aws_endpoint_url,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+    )
+    for attempt in range(retries):
+        try:
+            client.get_queue_url(QueueName="hotel-sync-queue")
+            print("SQS queue ready.")
+            return True
+        except ClientError:
+            print(f"SQS not ready, retrying in {delay}s... ({attempt + 1}/{retries})")
+            await asyncio.sleep(delay)
+    print("SQS queue not available after retries, skipping publish.")
+    return False
 
 HOTELS = [
     {
@@ -163,6 +188,7 @@ async def seed(db_url: str | None = None) -> None:
             await engine.dispose()
             return
 
+        sqs_ready = await wait_for_sqs()
         today = date.today()
 
         for hotel_data in HOTELS:
@@ -176,6 +202,17 @@ async def seed(db_url: str | None = None) -> None:
             )
             db.add(hotel)
             await db.flush()
+
+            hotel_dict = {
+                "id": str(hotel.id),
+                "name": hotel.name,
+                "description": hotel.description,
+                "city": hotel.city,
+                "country": hotel.country,
+                "rating": hotel.rating,
+            }
+            if sqs_ready:
+                await sqs_publisher.publish_hotel_created(hotel_dict)
 
             for room_data in hotel_data["rooms"]:
                 room = Room(
@@ -192,6 +229,20 @@ async def seed(db_url: str | None = None) -> None:
                 )
                 db.add(room)
                 await db.flush()
+
+                room_dict = {
+                    "id": str(room.id),
+                    "hotel_id": str(room.hotel_id),
+                    "room_type": room.room_type,
+                    "room_number": room.room_number,
+                    "capacity": room.capacity,
+                    "price_per_night": float(room.price_per_night),
+                    "tax_rate": float(room.tax_rate),
+                    "total_quantity": room.total_quantity,
+                    "amenities": room.amenities,
+                }
+                if sqs_ready:
+                    await sqs_publisher.publish_room_created(room_dict)
 
                 # Generate availability for each day
                 for i in range(AVAILABILITY_DAYS):
