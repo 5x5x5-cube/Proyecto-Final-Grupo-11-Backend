@@ -54,6 +54,13 @@ class SearchService:
                     hotel_data["min_price"] = (
                         min(r["price_per_night"] for r in rooms) if rooms else None
                     )
+                    # Aggregate unique amenities from all available rooms
+                    amenities: dict = {}
+                    for room in rooms:
+                        for key, val in (room.get("amenities") or {}).items():
+                            if val:
+                                amenities[key] = True
+                    hotel_data["amenities"] = amenities
                     hotels.append(hotel_data)
 
             total = len(hotels)
