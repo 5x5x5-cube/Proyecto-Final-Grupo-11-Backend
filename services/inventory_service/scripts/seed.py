@@ -255,6 +255,13 @@ async def seed(db_url: str | None = None) -> None:
                     )
                     db.add(avail)
 
+                    if sqs_ready:
+                        await sqs_publisher.publish_availability_created({
+                            "room_id": str(room.id),
+                            "date": str(d),
+                            "available_quantity": room_data["total_quantity"],
+                        })
+
         await db.commit()
         print(
             f"Seed complete: {len(HOTELS)} hotels, "

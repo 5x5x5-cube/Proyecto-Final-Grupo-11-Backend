@@ -82,5 +82,11 @@ class SQSPublisher:
     async def publish_room_deleted(self, room_data: Dict[str, Any]) -> bool:
         return await self.publish_event("deleted", "room", room_data)
 
+    async def publish_availability_created(self, availability_data: Dict[str, Any]) -> bool:
+        return await self.publish_event("created", "availability", availability_data)
+
+    async def publish_availability_updated(self, availability_data: Dict[str, Any]) -> bool:
+        return await self.publish_event("updated", "availability", availability_data)
+
 
 sqs_publisher = SQSPublisher()
