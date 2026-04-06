@@ -16,6 +16,9 @@ class CreateBookingRequest(BaseModel):
     tax_amount: Decimal = Field(..., alias="taxAmount")
     service_fee: Decimal = Field(Decimal("0"), alias="serviceFee")
     total_price: Decimal = Field(..., alias="totalPrice")
+    guest_name: str | None = Field(None, alias="guestName", max_length=200)
+    guest_email: str | None = Field(None, alias="guestEmail", max_length=254)
+    guest_phone: str | None = Field(None, alias="guestPhone", max_length=30)
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -30,6 +33,12 @@ class PriceBreakdown(BaseModel):
     currency: str = "COP"
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class BookingTimelineEvent(BaseModel):
+    event: str
+    timestamp: datetime
+    description: str
 
 
 class BookingResponse(BaseModel):
@@ -50,6 +59,10 @@ class BookingResponse(BaseModel):
     price_breakdown: PriceBreakdown | None = Field(None, alias="priceBreakdown")
     hold_expires_at: datetime | None = Field(None, alias="holdExpiresAt")
     created_at: datetime = Field(..., alias="createdAt")
+    guest_name: str | None = Field(None, alias="guestName")
+    guest_email: str | None = Field(None, alias="guestEmail")
+    guest_phone: str | None = Field(None, alias="guestPhone")
+    timeline: list[BookingTimelineEvent] = Field(default_factory=list)
 
 
 class BookingListResponse(BaseModel):

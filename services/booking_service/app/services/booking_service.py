@@ -10,12 +10,58 @@ from ..exceptions import BookingAlreadyProcessedError, BookingNotFoundError
 from ..models import Booking
 from ..schemas import (
     BookingResponse,
+    BookingTimelineEvent,
     CreateBookingRequest,
     HotelBookingListResponse,
     HotelBookingSummary,
     PriceBreakdown,
     UpdateBookingStatusRequest,
 )
+
+# Descripciones de eventos para el timeline según el estado de la reserva
+_TIMELINE_DESCRIPTIONS: dict[str, str] = {
+    "hold_created": "Habitación reservada temporalmente (hold de 15 min)",
+    "booking_created": "Reserva registrada en el sistema",
+    "confirmed": "Reserva confirmada por el hotel",
+    "rejected": "Reserva rechazada por el hotel",
+    "cancelled": "Reserva cancelada",
+}
+
+
+def _build_timeline(booking: Booking) -> list[BookingTimelineEvent]:
+    """Deriva la línea de tiempo de la reserva a partir de sus datos persistidos."""
+    events: list[BookingTimelineEvent] = []
+
+    # Evento 1 — hold creado (si existe hold_id usamos created_at como referencia)
+    if booking.hold_id:
+        events.append(
+            BookingTimelineEvent(
+                event="hold_created",
+                timestamp=booking.created_at,
+                description=_TIMELINE_DESCRIPTIONS["hold_created"],
+            )
+        )
+
+    # Evento 2 — reserva creada
+    events.append(
+        BookingTimelineEvent(
+            event="booking_created",
+            timestamp=booking.created_at,
+            description=_TIMELINE_DESCRIPTIONS["booking_created"],
+        )
+    )
+
+    # Evento 3 — estado final (si ya no está pendiente)
+    if booking.status in ("confirmed", "rejected", "cancelled"):
+        events.append(
+            BookingTimelineEvent(
+                event=booking.status,
+                timestamp=booking.updated_at,
+                description=_TIMELINE_DESCRIPTIONS[booking.status],
+            )
+        )
+
+    return events
 
 
 def build_booking_response(
@@ -40,6 +86,10 @@ def build_booking_response(
         priceBreakdown=price_breakdown,
         holdExpiresAt=hold_expires_at,
         createdAt=booking.created_at,
+        guestName=booking.guest_name,
+        guestEmail=booking.guest_email,
+        guestPhone=booking.guest_phone,
+        timeline=_build_timeline(booking),
     )
 
 
@@ -65,6 +115,9 @@ async def create_booking(
         tax_amount=request.tax_amount,
         service_fee=request.service_fee,
         total_price=request.total_price,
+        guest_name=request.guest_name,
+        guest_email=request.guest_email,
+        guest_phone=request.guest_phone,
     )
     db.add(booking)
     await db.commit()
