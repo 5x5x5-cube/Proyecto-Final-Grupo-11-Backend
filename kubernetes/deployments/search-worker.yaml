@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-worker
+  labels:
+    app: search-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-worker
+  template:
+    metadata:
+      labels:
+        app: search-worker
+    spec:
+      serviceAccountName: search-service-sa
+      containers:
+      - name: search-worker
+        image: ${ECR_REGISTRY}/search-service:${IMAGE_TAG}
+        command: ["python", "workers/sqs_worker.py"]
+        env:
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: search-service-config
+              key: redis-url
+        - name: SQS_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: search-service-config
+              key: sqs-queue-url
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: AWS_ENDPOINT_URL
+          value: ""
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"

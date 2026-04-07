@@ -24,6 +24,9 @@ ecr_repositories = [
   "health-copilot"
 ]
 
+redis_node_type = "cache.t3.micro"
+redis_num_cache_nodes = 1
+
 db_instance_class = "db.t3.micro"
 db_name = "proyectofinal"
 db_username = "admin"

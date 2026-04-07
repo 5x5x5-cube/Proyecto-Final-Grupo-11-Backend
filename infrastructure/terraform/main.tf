@@ -63,3 +63,30 @@ module "rds" {
   db_name            = var.db_name
   db_username        = var.db_username
 }
+
+module "elasticache" {
+  source = "./modules/elasticache"
+  
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  node_type          = var.redis_node_type
+  num_cache_nodes    = var.redis_num_cache_nodes
+}
+
+module "sqs" {
+  source = "./modules/sqs"
+  
+  project_name = var.project_name
+  environment  = var.environment
+}
+
+module "irsa" {
+  source = "./modules/irsa"
+  
+  project_name          = var.project_name
+  environment           = var.environment
+  eks_oidc_issuer_url   = module.eks.oidc_issuer_url
+  sqs_access_policy_arn = module.sqs.sqs_access_policy_arn
+}
