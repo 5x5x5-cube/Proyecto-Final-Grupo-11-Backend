@@ -92,7 +92,7 @@ cd infrastructure/terraform
 DB_ENDPOINT=$(terraform output -raw rds_endpoint)
 DB_NAME=$(terraform output -raw rds_database_name)
 REDIS_ENDPOINT=$(terraform output -raw redis_endpoint)
-HOTEL_SYNC_QUEUE_URL=$(terraform output -raw hotel_sync_queue_url)
+HOTEL_SYNC_QUEUE_URL=$(terraform output -raw sqs_hotel_sync_queue_url)
 
 echo "DB Endpoint: $DB_ENDPOINT"
 echo "Redis Endpoint: $REDIS_ENDPOINT"
