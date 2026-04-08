@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: search-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: ${SEARCH_SERVICE_ROLE_ARN}
+    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-search-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -12,7 +12,7 @@ metadata:
   labels:
     app: search-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: search-service
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: search-service-sa
       containers:
       - name: search-service
-        image: ${ECR_REGISTRY}/search-service:${IMAGE_TAG}
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/search-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -74,3 +74,4 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+

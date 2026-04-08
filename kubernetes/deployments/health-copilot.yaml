@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: health-copilot
-        image: ${ECR_REGISTRY}/health-copilot:${IMAGE_TAG}
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/health-copilot:latest
         ports:
         - containerPort: 8000
         livenessProbe:
@@ -51,3 +51,4 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+

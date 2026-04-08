@@ -13,6 +13,11 @@ variable "eks_oidc_issuer_url" {
   type        = string
 }
 
+variable "eks_oidc_provider_arn" {
+  description = "EKS OIDC provider ARN"
+  type        = string
+}
+
 variable "sqs_access_policy_arn" {
   description = "ARN of the SQS access IAM policy"
   type        = string
