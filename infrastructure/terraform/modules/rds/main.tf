@@ -50,7 +50,7 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 resource "aws_db_instance" "main" {
   identifier             = "${var.project_name}-${var.environment}-db"
   engine                 = "postgres"
-  engine_version         = "15.4"
+  engine_version         = "16.4"
   instance_class         = var.db_instance_class
   allocated_storage      = 20
   max_allocated_storage  = 100
