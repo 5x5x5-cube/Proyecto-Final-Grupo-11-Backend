@@ -16,7 +16,8 @@ NC='\033[0m' # No Color
 CLUSTER_NAME="proyecto-final-dev"
 REGION="us-east-1"
 AWS_ACCOUNT_ID="618246140762"
-ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/proyecto-final-dev"
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+ECR_PREFIX="proyecto-final-dev"
 
 echo -e "${YELLOW}Paso 1: Configurar acceso a EKS${NC}"
 
@@ -151,8 +152,8 @@ for SERVICE in "${SERVICES[@]}"; do
         SERVICE_DIR="services/${SERVICE//-/_}"
     fi
     
-    docker build -t $ECR_REGISTRY/$SERVICE:latest $SERVICE_DIR
-    docker push $ECR_REGISTRY/$SERVICE:latest
+    docker build -t $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest $SERVICE_DIR
+    docker push $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest
     
     echo -e "${GREEN}$SERVICE subido a ECR${NC}"
 done

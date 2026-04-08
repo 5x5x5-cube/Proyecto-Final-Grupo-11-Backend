@@ -24,7 +24,7 @@ spec:
       serviceAccountName: search-service-sa
       containers:
       - name: search-service
-        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/search-service:latest
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-search-service:latest
         ports:
         - containerPort: 8000
         env:
