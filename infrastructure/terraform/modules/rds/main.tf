@@ -61,8 +61,8 @@ resource "aws_db_instance" "main" {
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   skip_final_snapshot    = true
-  backup_retention_period = 7
-  multi_az               = var.environment == "prod" ? true : false
+  backup_retention_period = 0
+  multi_az               = false
 
   tags = {
     Name        = "${var.project_name}-${var.environment}-db"
