@@ -271,9 +271,7 @@ def test_get_hotel_rooms_calls_get_available_rooms(mock_redis):
 def test_is_room_available_for_dates_all_available(mock_redis):
     """Habitación disponible en todas las fechas retorna True"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.return_value = [2]
+        mock_rc.json_get.return_value = [2]
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -286,9 +284,7 @@ def test_is_room_available_for_dates_all_available(mock_redis):
 def test_is_room_available_for_dates_one_day_unavailable(mock_redis):
     """Si un día tiene available_quantity = 0 retorna False"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.side_effect = [[1], [0]]
+        mock_rc.json_get.side_effect = [[1], [0]]
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -301,9 +297,7 @@ def test_is_room_available_for_dates_one_day_unavailable(mock_redis):
 def test_is_room_available_no_redis_record(mock_redis):
     """Si no hay registro en Redis retorna False"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.return_value = None
+        mock_rc.json_get.return_value = None
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -316,9 +310,7 @@ def test_is_room_available_no_redis_record(mock_redis):
 def test_is_room_available_redis_exception(mock_redis):
     """Si Redis lanza excepción retorna False"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.side_effect = Exception("Redis error")
+        mock_rc.json_get.side_effect = Exception("Redis error")
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -347,9 +339,7 @@ def test_index_hotel_success(mock_redis):
 def test_index_hotel_failure(mock_redis):
     """index_hotel retorna False cuando Redis lanza excepción"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().set.side_effect = Exception("Redis error")
+        mock_rc.json_set.side_effect = Exception("Redis error")
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -387,9 +377,7 @@ def test_index_room_success(mock_redis):
 def test_index_room_failure(mock_redis):
     """index_room retorna False cuando Redis lanza excepción"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().set.side_effect = Exception("Redis error")
+        mock_rc.json_set.side_effect = Exception("Redis error")
 
         from app.services.redis_indexer import RedisIndexer
 
@@ -1062,28 +1050,22 @@ def test_get_hotel_detail_no_interfiere_con_rooms(mock_redis, mock_search_servic
 def test_get_hotel_by_id_lee_desde_redis(mock_redis):
     """get_hotel_by_id lee el JSON del hotel desde la key hotel:{id} en Redis"""
     with patch("app.services.search_service.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-
         hotel_data = {"id": "hotel-001", "name": "Test Hotel", "city": "Bogotá"}
-        # json().get con "$" retorna lista con el objeto raíz
-        mock_client.json().get.return_value = [hotel_data]
+        mock_rc.json_get.return_value = [hotel_data]
 
         from app.services.search_service import SearchService
 
         servicio = SearchService()
         resultado = servicio.get_hotel_by_id("hotel-001")
 
-        mock_client.json().get.assert_called_once_with("hotel:hotel-001", "$")
+        mock_rc.json_get.assert_called_once_with("hotel:hotel-001")
         assert resultado == hotel_data
 
 
 def test_get_hotel_by_id_retorna_none_si_key_no_existe(mock_redis):
     """get_hotel_by_id retorna None cuando la key no existe en Redis"""
     with patch("app.services.search_service.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.return_value = None
+        mock_rc.json_get.return_value = None
 
         from app.services.search_service import SearchService
 
@@ -1096,9 +1078,7 @@ def test_get_hotel_by_id_retorna_none_si_key_no_existe(mock_redis):
 def test_get_hotel_by_id_retorna_none_si_lista_vacia(mock_redis):
     """get_hotel_by_id retorna None cuando Redis retorna lista vacía"""
     with patch("app.services.search_service.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.return_value = []
+        mock_rc.json_get.return_value = []
 
         from app.services.search_service import SearchService
 
@@ -1111,9 +1091,7 @@ def test_get_hotel_by_id_retorna_none_si_lista_vacia(mock_redis):
 def test_get_hotel_by_id_retorna_none_ante_error_redis(mock_redis):
     """get_hotel_by_id retorna None si Redis lanza una excepción"""
     with patch("app.services.search_service.redis_client") as mock_rc:
-        mock_client = MagicMock()
-        mock_rc.get_client.return_value = mock_client
-        mock_client.json().get.side_effect = Exception("Redis no disponible")
+        mock_rc.json_get.side_effect = Exception("Redis no disponible")
 
         from app.services.search_service import SearchService
 

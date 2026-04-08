@@ -6,13 +6,13 @@ from app.redis_client import redis_client
 
 class RedisIndexer:
     def __init__(self):
-        self.client = redis_client.get_client()
+        self.rc = redis_client
 
     def index_hotel(self, hotel_id: str, hotel_data: Dict[str, Any]) -> bool:
         """Guarda el JSON del hotel en Redis con key hotel:{id}"""
         try:
             key = f"hotel:{hotel_id}"
-            self.client.json().set(key, "$", hotel_data)
+            self.rc.json_set(key, hotel_data)
             print(f"Indexed hotel: {hotel_id} - {hotel_data.get('name')}")
             return True
         except Exception as e:
@@ -27,7 +27,7 @@ class RedisIndexer:
         """Elimina el hotel del índice de Redis."""
         try:
             key = f"hotel:{hotel_id}"
-            self.client.delete(key)
+            self.rc.json_delete(key)
             print(f"Deleted hotel from index: {hotel_id}")
             return True
         except Exception as e:
@@ -38,7 +38,7 @@ class RedisIndexer:
         """Guarda el JSON de la habitación en Redis con key room:{id}"""
         try:
             key = f"room:{room_id}"
-            self.client.json().set(key, "$", room_data)
+            self.rc.json_set(key, room_data)
             print(f"Indexed room: {room_id} - {room_data.get('room_number')}")
             return True
         except Exception as e:
@@ -53,7 +53,7 @@ class RedisIndexer:
         """Elimina la habitación del índice de Redis."""
         try:
             key = f"room:{room_id}"
-            self.client.delete(key)
+            self.rc.json_delete(key)
             print(f"Deleted room from index: {room_id}")
             return True
         except Exception as e:
@@ -74,9 +74,8 @@ class RedisIndexer:
             available_quantity = availability_data.get("available_quantity", 0)
 
             key = f"availability:{room_id}:{avail_date}"
-            self.client.json().set(
+            self.rc.json_set(
                 key,
-                "$",
                 {
                     "room_id": room_id,
                     "date": avail_date,
@@ -106,7 +105,7 @@ class RedisIndexer:
         """
         try:
             key = f"availability:{room_id}:{avail_date}"
-            self.client.delete(key)
+            self.rc.json_delete(key)
             print(f"Deleted availability: room={room_id} date={avail_date}")
             return True
         except Exception as e:
@@ -126,23 +125,18 @@ class RedisIndexer:
         - Algún día no tiene registro en Redis (nunca fue indexado)
         - Algún día tiene available_quantity <= 0 (sin stock)
         """
-        # Genera la lista de fechas del rango
         days = (check_out - check_in).days
         dates = [check_in + timedelta(days=i) for i in range(days)]
 
         for d in dates:
             key = f"availability:{room_id}:{d}"
             try:
-                # Consulta solo el campo available_quantity del JSON
-                result = self.client.json().get(key, "$.available_quantity")
-                # Si no existe la key o la cantidad es 0 → no disponible
+                result = self.rc.json_get(key, "$.available_quantity")
                 if not result or result[0] <= 0:
                     return False
             except Exception:
-                # Si hay error al leer Redis → asumimos no disponible
                 return False
 
-        # Todos los días tienen disponibilidad
         return True
 
 
