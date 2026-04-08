@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: inventory-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: ${INVENTORY_SERVICE_ROLE_ARN}
+    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-inventory-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: inventory-service-sa
       containers:
       - name: inventory-service
-        image: ${ECR_REGISTRY}/inventory-service:${IMAGE_TAG}
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/inventory-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -79,3 +79,4 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+

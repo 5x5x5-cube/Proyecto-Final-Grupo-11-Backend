@@ -15,6 +15,23 @@ resource "aws_iam_role" "cluster" {
   })
 }
 
+resource "aws_eks_access_entry" "admin" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = data.aws_caller_identity.current.arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "admin_policy" {
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = data.aws_caller_identity.current.arn
+
+  policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+}
+
 resource "aws_iam_role_policy_attachment" "cluster_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
   role       = aws_iam_role.cluster.name
@@ -53,6 +70,11 @@ resource "aws_eks_cluster" "main" {
     security_group_ids      = [aws_security_group.cluster.id]
     endpoint_private_access = true
     endpoint_public_access  = true
+  }
+
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
   }
 
   depends_on = [

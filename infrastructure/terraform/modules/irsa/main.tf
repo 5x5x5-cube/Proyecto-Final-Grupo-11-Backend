@@ -1,7 +1,3 @@
-data "aws_iam_openid_connect_provider" "eks" {
-  url = var.eks_oidc_issuer_url
-}
-
 resource "aws_iam_role" "inventory_service" {
   name = "${var.project_name}-${var.environment}-inventory-service-role"
 
@@ -10,7 +6,7 @@ resource "aws_iam_role" "inventory_service" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = data.aws_iam_openid_connect_provider.eks.arn
+        Federated = var.eks_oidc_provider_arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
@@ -41,7 +37,7 @@ resource "aws_iam_role" "search_service" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = data.aws_iam_openid_connect_provider.eks.arn
+        Federated = var.eks_oidc_provider_arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {

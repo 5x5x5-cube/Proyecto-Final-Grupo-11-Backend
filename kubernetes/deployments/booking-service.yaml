@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: booking-service
-        image: ${ECR_REGISTRY}/booking-service:${IMAGE_TAG}
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/booking-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -57,3 +57,4 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+
