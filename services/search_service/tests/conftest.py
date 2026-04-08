@@ -20,7 +20,7 @@ def pytest_configure(config):
     mock_from_url = _redis_patcher.start()
     mock_from_url.return_value = _mock_redis_instance
 
-    # Simulamos que los índices ya existen para que _ensure_indexes no falle
+    # Simulamos que los índices ya existen para que _try_ensure_indexes no falle
     # (el código solo captura redis.ResponseError, así que retornamos exitosamente)
     _mock_redis_instance.ft.return_value.info.return_value = {"index_name": "test"}
     _mock_redis_instance.ping.return_value = True

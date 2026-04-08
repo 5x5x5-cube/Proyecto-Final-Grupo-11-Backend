@@ -111,23 +111,43 @@ DB_PASSWORD=$(aws secretsmanager get-secret-value \
   --query SecretString \
   --output text)
 
-# Crear secret de base de datos
-kubectl create secret generic db-credentials \
-  --from-literal=username=dbadmin \
-  --from-literal=password="$DB_PASSWORD" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# Construir DATABASE_URL para cada servicio que lo necesite
+# Formato: postgresql+asyncpg://user:pass@host:port/dbname
+DB_HOST=$(echo "$DB_ENDPOINT" | cut -d: -f1)
+DB_PORT=$(echo "$DB_ENDPOINT" | cut -d: -f2)
+DATABASE_URL="postgresql+asyncpg://dbadmin:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+
+REDIS_URL="redis://${REDIS_ENDPOINT}:6379"
+
+# Secrets con database-url por servicio
+for SVC in auth-service inventory-service cart-service; do
+    kubectl create secret generic ${SVC}-secrets \
+      --from-literal=database-url="$DATABASE_URL" \
+      --dry-run=client -o yaml | kubectl apply -f -
+done
 
 echo -e "${GREEN}Secrets creados${NC}"
 
 echo ""
 echo -e "${YELLOW}Paso 5: Crear ConfigMaps${NC}"
 
-kubectl create configmap app-config \
-  --from-literal=DB_HOST="$DB_ENDPOINT" \
-  --from-literal=DB_NAME="$DB_NAME" \
-  --from-literal=REDIS_URL="redis://$REDIS_ENDPOINT:6379" \
-  --from-literal=HOTEL_SYNC_QUEUE_URL="$HOTEL_SYNC_QUEUE_URL" \
-  --from-literal=AWS_REGION="$REGION" \
+# ConfigMaps por servicio según lo que cada deployment espera
+kubectl create configmap cart-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create configmap notification-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create configmap inventory-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create configmap search-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo -e "${GREEN}ConfigMaps creados${NC}"
@@ -161,14 +181,21 @@ done
 echo ""
 echo -e "${YELLOW}Paso 8: Desplegar servicios en Kubernetes${NC}"
 
-# Desplegar en orden
-kubectl apply -f kubernetes/deployments/auth-service.yaml
-kubectl apply -f kubernetes/deployments/inventory-service.yaml
-kubectl apply -f kubernetes/deployments/search-service.yaml
-kubectl apply -f kubernetes/deployments/search-worker.yaml
-kubectl apply -f kubernetes/deployments/cart-service.yaml
-kubectl apply -f kubernetes/deployments/notification-service.yaml
-kubectl apply -f kubernetes/deployments/health-copilot.yaml
+# Solo desplegar los servicios que tienen imagen construida
+DEPLOY_YAMLS=(
+    "kubernetes/deployments/auth-service.yaml"
+    "kubernetes/deployments/inventory-service.yaml"
+    "kubernetes/deployments/search-service.yaml"
+    "kubernetes/deployments/search-worker.yaml"
+    "kubernetes/deployments/cart-service.yaml"
+    "kubernetes/deployments/notification-service.yaml"
+    "kubernetes/deployments/health-copilot.yaml"
+)
+
+for YAML in "${DEPLOY_YAMLS[@]}"; do
+    echo "Aplicando $YAML..."
+    kubectl apply -f "$YAML"
+done
 
 echo -e "${GREEN}Servicios desplegados${NC}"
 
@@ -193,7 +220,7 @@ echo ""
 
 # Esperar a que el ingress tenga una dirección
 for i in {1..60}; do
-    LB_URL=$(kubectl get ingress hotel-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+    LB_URL=$(kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
     if [ ! -z "$LB_URL" ]; then
         echo -e "${GREEN}Load Balancer URL: http://$LB_URL${NC}"
         echo ""
@@ -213,7 +240,7 @@ done
 if [ -z "$LB_URL" ]; then
     echo ""
     echo -e "${YELLOW}El Load Balancer aún no está listo. Ejecuta este comando para obtener la URL:${NC}"
-    echo "kubectl get ingress hotel-ingress"
+    echo "kubectl get ingress api-gateway"
 fi
 
 echo ""
