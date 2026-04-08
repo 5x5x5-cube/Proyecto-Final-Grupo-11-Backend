@@ -238,7 +238,7 @@ function Deploy-Kubernetes {
     
     Write-Host ""
     Write-Host "🌐 Load Balancer URL:" -ForegroundColor Yellow
-    kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+    kubectl get ingress api-gateway -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
     Write-Host ""
 }
 
