@@ -12,7 +12,7 @@ metadata:
   labels:
     app: inventory-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: inventory-service
