@@ -16,7 +16,8 @@ NC='\033[0m' # No Color
 CLUSTER_NAME="proyecto-final-dev"
 REGION="us-east-1"
 AWS_ACCOUNT_ID="618246140762"
-ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/proyecto-final-dev"
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+ECR_PREFIX="proyecto-final-dev"
 
 echo -e "${YELLOW}Paso 1: Configurar acceso a EKS${NC}"
 
@@ -29,10 +30,10 @@ CLUSTER_ARN="arn:aws:eks:${REGION}:${AWS_ACCOUNT_ID}:cluster/${CLUSTER_NAME}"
 # En Windows, aws.exe (PyInstaller) crashea como subproceso de kubectl.
 # Usar aws-iam-authenticator (binario Go nativo) si está disponible.
 IAM_AUTH_PATH=""
-if command -v aws-iam-authenticator &>/dev/null; then
-    IAM_AUTH_PATH="aws-iam-authenticator"
-elif [ -f "$HOME/bin/aws-iam-authenticator.exe" ]; then
-    IAM_AUTH_PATH="$(cygpath -w "$HOME/bin/aws-iam-authenticator.exe" 2>/dev/null || echo "$HOME/bin/aws-iam-authenticator.exe")"
+if [ -f "$HOME/bin/aws-iam-authenticator.exe" ]; then
+    IAM_AUTH_PATH="$(cygpath -w "$HOME/bin/aws-iam-authenticator.exe" 2>/dev/null || echo "C:\\Users\\$USER\\bin\\aws-iam-authenticator.exe")"
+elif command -v aws-iam-authenticator &>/dev/null; then
+    IAM_AUTH_PATH="$(which aws-iam-authenticator)"
 fi
 
 KUBECONFIG_FILE="$HOME/.kube/config"
@@ -151,8 +152,8 @@ for SERVICE in "${SERVICES[@]}"; do
         SERVICE_DIR="services/${SERVICE//-/_}"
     fi
     
-    docker build -t $ECR_REGISTRY/$SERVICE:latest $SERVICE_DIR
-    docker push $ECR_REGISTRY/$SERVICE:latest
+    docker build -t $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest $SERVICE_DIR
+    docker push $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest
     
     echo -e "${GREEN}$SERVICE subido a ECR${NC}"
 done

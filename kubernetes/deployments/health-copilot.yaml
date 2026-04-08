@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: health-copilot
-        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev/health-copilot:latest
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-health-copilot:latest
         ports:
         - containerPort: 8000
         livenessProbe:
@@ -33,10 +33,10 @@ spec:
           periodSeconds: 5
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "64Mi"
+            cpu: "50m"
           limits:
-            memory: "256Mi"
+            memory: "192Mi"
             cpu: "250m"
 ---
 apiVersion: v1
