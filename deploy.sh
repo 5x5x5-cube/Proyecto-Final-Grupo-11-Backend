@@ -30,10 +30,10 @@ CLUSTER_ARN="arn:aws:eks:${REGION}:${AWS_ACCOUNT_ID}:cluster/${CLUSTER_NAME}"
 # En Windows, aws.exe (PyInstaller) crashea como subproceso de kubectl.
 # Usar aws-iam-authenticator (binario Go nativo) si está disponible.
 IAM_AUTH_PATH=""
-if command -v aws-iam-authenticator &>/dev/null; then
-    IAM_AUTH_PATH="aws-iam-authenticator"
-elif [ -f "$HOME/bin/aws-iam-authenticator.exe" ]; then
-    IAM_AUTH_PATH="$(cygpath -w "$HOME/bin/aws-iam-authenticator.exe" 2>/dev/null || echo "$HOME/bin/aws-iam-authenticator.exe")"
+if [ -f "$HOME/bin/aws-iam-authenticator.exe" ]; then
+    IAM_AUTH_PATH="$(cygpath -w "$HOME/bin/aws-iam-authenticator.exe" 2>/dev/null || echo "C:\\Users\\$USER\\bin\\aws-iam-authenticator.exe")"
+elif command -v aws-iam-authenticator &>/dev/null; then
+    IAM_AUTH_PATH="$(which aws-iam-authenticator)"
 fi
 
 KUBECONFIG_FILE="$HOME/.kube/config"
