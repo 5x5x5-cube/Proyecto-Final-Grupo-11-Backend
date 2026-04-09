@@ -179,7 +179,20 @@ for SERVICE in "${SERVICES[@]}"; do
 done
 
 echo ""
-echo -e "${YELLOW}Paso 8: Desplegar servicios en Kubernetes${NC}"
+echo -e "${YELLOW}Paso 8: Instalar NGINX Ingress Controller${NC}"
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/aws/deploy.yaml
+
+# Esperar a que el controller esté listo
+echo "Esperando a que NGINX Ingress Controller esté listo..."
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/name=ingress-nginx \
+  --timeout=120s
+
+echo -e "${GREEN}NGINX Ingress Controller instalado${NC}"
+
+echo ""
+echo -e "${YELLOW}Paso 9: Desplegar servicios en Kubernetes${NC}"
 
 # Solo desplegar los servicios que tienen imagen construida
 DEPLOY_YAMLS=(
@@ -200,7 +213,7 @@ done
 echo -e "${GREEN}Servicios desplegados${NC}"
 
 echo ""
-echo -e "${YELLOW}Paso 9: Desplegar Ingress${NC}"
+echo -e "${YELLOW}Paso 10: Desplegar Ingress${NC}"
 kubectl apply -f kubernetes/ingress.yaml
 
 echo ""
@@ -229,8 +242,8 @@ for i in {1..60}; do
         echo "  - http://$LB_URL/inventory/health"
         echo "  - http://$LB_URL/search/health"
         echo "  - http://$LB_URL/cart/health"
-        echo "  - http://$LB_URL/notifications/health"
-        echo "  - http://$LB_URL/copilot/health"
+        echo "  - http://$LB_URL/notification/health"
+        echo "  - http://$LB_URL/health-copilot/health"
         break
     fi
     echo -n "."
