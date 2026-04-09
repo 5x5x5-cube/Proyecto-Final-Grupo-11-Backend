@@ -1,10 +1,10 @@
 name: Build and Push to ECR
 
 on:
-  push:
-    branches: [ main, develop ]
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["CI - Lint and Test"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -13,30 +13,31 @@ env:
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     outputs:
       services: ${{ steps.set-services.outputs.services }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      
+
       - name: Detect changed services
         id: set-services
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "${{ startsWith(github.ref, 'refs/tags/v') }}" == "true" ]; then
-            # Build all services for manual dispatch or version tags
-            SERVICES='["auth-service","booking-service","search-service","cart-service","reports-service","inventory-service","commercial-service","notification-service","payment-service","health-copilot"]'
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SERVICES='["auth_service","search_service","cart_service","inventory_service","notification_service","health_copilot"]'
           else
-            # Detect changed services
-            CHANGED_SERVICES=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u | jq -R -s -c 'split("\n")[:-1]')
-            if [ "$CHANGED_SERVICES" == "[]" ] || [ -z "$CHANGED_SERVICES" ]; then
+            CHANGED=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u || true)
+            if [ -z "$CHANGED" ]; then
               SERVICES='[]'
             else
-              SERVICES=$CHANGED_SERVICES
+              SERVICES=$(echo "$CHANGED" | jq -R -s -c 'split("\n")[:-1]')
             fi
           fi
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
-          echo "Changed services: $SERVICES"
+          echo "Services to build: $SERVICES"
 
   build-and-push:
     needs: detect-changes
@@ -45,38 +46,33 @@ jobs:
     strategy:
       matrix:
         service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Extract metadata
         id: meta
         run: |
-          SERVICE_NAME=$(echo ${{ matrix.service }} | sed 's/_/-/g')
+          # service dir uses underscores (cart_service), k8s uses dashes (cart-service)
+          SERVICE_NAME=$(echo "${{ matrix.service }}" | sed 's/_/-/g')
           echo "service-name=$SERVICE_NAME" >> $GITHUB_OUTPUT
-          
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION=${GITHUB_SHA::8}
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-      
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -93,18 +89,6 @@ jobs:
             org.opencontainers.image.created=${{ steps.meta.outputs.date }}
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.revision=${{ github.sha }}
-      
-      - name: Update Kubernetes manifest
-        run: |
-          SERVICE_NAME=$(echo ${{ matrix.service }} | sed 's/_/-/g')
-          sed -i "s|\${ECR_REGISTRY}|${{ steps.login-ecr.outputs.registry }}/proyecto-final-dev|g" kubernetes/deployments/${SERVICE_NAME}.yaml
-          sed -i "s|\${IMAGE_TAG}|${{ steps.meta.outputs.version }}|g" kubernetes/deployments/${SERVICE_NAME}.yaml
-      
-      - name: Upload Kubernetes manifests
-        uses: actions/upload-artifact@v3
-        with:
-          name: k8s-manifests-${{ matrix.service }}
-          path: kubernetes/deployments/${{ steps.meta.outputs.service-name }}.yaml
 
   build-summary:
     needs: build-and-push

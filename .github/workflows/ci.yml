@@ -140,7 +140,7 @@ jobs:
           fi
 
   all-tests-passed:
-    needs: [lint-and-test, commitlint]
+    needs: [detect-changes, lint-and-test, commitlint]
     runs-on: ubuntu-latest
     if: always()
     steps:

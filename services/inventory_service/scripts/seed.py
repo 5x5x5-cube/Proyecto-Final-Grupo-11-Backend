@@ -17,13 +17,14 @@ async def wait_for_sqs(retries: int = 10, delay: int = 3) -> bool:
     import boto3
     from botocore.exceptions import ClientError
 
-    client = boto3.client(
-        "sqs",
-        region_name=settings.aws_region,
-        endpoint_url=settings.aws_endpoint_url,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
-    )
+    client_kwargs = {
+        "region_name": settings.aws_region,
+        "aws_access_key_id": settings.aws_access_key_id,
+        "aws_secret_access_key": settings.aws_secret_access_key,
+    }
+    if settings.aws_endpoint_url:
+        client_kwargs["endpoint_url"] = settings.aws_endpoint_url
+    client = boto3.client("sqs", **client_kwargs)
     for attempt in range(retries):
         try:
             client.get_queue_url(QueueName="hotel-sync-queue")
