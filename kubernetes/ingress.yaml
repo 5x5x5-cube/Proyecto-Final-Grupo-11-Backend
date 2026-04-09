@@ -2,6 +2,86 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: api-gateway
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /api/v1/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 80
+      - path: /api/v1/booking
+        pathType: Prefix
+        backend:
+          service:
+            name: booking-service
+            port:
+              number: 80
+      - path: /api/v1/search
+        pathType: Prefix
+        backend:
+          service:
+            name: search-service
+            port:
+              number: 80
+      - path: /api/v1/cart
+        pathType: Prefix
+        backend:
+          service:
+            name: cart-service
+            port:
+              number: 80
+      - path: /api/v1/reports
+        pathType: Prefix
+        backend:
+          service:
+            name: reports-service
+            port:
+              number: 80
+      - path: /api/v1/inventory
+        pathType: Prefix
+        backend:
+          service:
+            name: inventory-service
+            port:
+              number: 80
+      - path: /api/v1/commercial
+        pathType: Prefix
+        backend:
+          service:
+            name: commercial-service
+            port:
+              number: 80
+      - path: /api/v1/notification
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 80
+      - path: /api/v1/payment
+        pathType: Prefix
+        backend:
+          service:
+            name: payment-service
+            port:
+              number: 80
+      - path: /api/v1/health-copilot
+        pathType: Prefix
+        backend:
+          service:
+            name: health-copilot
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inventory-webhook
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -10,73 +90,10 @@ spec:
   rules:
   - http:
       paths:
-      - path: /auth(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: auth-service
-            port:
-              number: 80
-      - path: /booking(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: booking-service
-            port:
-              number: 80
-      - path: /search(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: search-service
-            port:
-              number: 80
-      - path: /cart(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: cart-service
-            port:
-              number: 80
-      - path: /reports(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: reports-service
-            port:
-              number: 80
       - path: /inventory(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:
             name: inventory-service
-            port:
-              number: 80
-      - path: /commercial(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: commercial-service
-            port:
-              number: 80
-      - path: /notification(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: notification-service
-            port:
-              number: 80
-      - path: /payment(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: payment-service
-            port:
-              number: 80
-      - path: /health-copilot(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: health-copilot
             port:
               number: 80
