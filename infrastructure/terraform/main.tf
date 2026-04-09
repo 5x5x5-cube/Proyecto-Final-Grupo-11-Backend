@@ -92,14 +92,3 @@ module "irsa" {
   eks_oidc_provider_arn  = module.eks.oidc_provider_arn
   sqs_access_policy_arn  = module.sqs.sqs_access_policy_arn
 }
-
-module "alb_controller" {
-  source = "./modules/alb-controller"
-
-  project_name          = var.project_name
-  environment           = var.environment
-  eks_cluster_name      = module.eks.cluster_name
-  eks_oidc_issuer_url  = module.eks.oidc_issuer_url
-  eks_oidc_provider_arn = module.eks.oidc_provider_arn
-  vpc_id                = module.vpc.vpc_id
-}
