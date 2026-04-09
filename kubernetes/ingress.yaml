@@ -3,82 +3,78 @@ kind: Ingress
 metadata:
   name: api-gateway
   annotations:
-    kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
+  ingressClassName: nginx
   rules:
-  - host: api.yourdomain.com
-    http:
+  - http:
       paths:
-      - path: /auth
-        pathType: Prefix
+      - path: /auth(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: auth-service
             port:
               number: 80
-      - path: /booking
-        pathType: Prefix
+      - path: /booking(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: booking-service
             port:
               number: 80
-      - path: /search
-        pathType: Prefix
+      - path: /search(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: search-service
             port:
               number: 80
-      - path: /cart
-        pathType: Prefix
+      - path: /cart(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: cart-service
             port:
               number: 80
-      - path: /reports
-        pathType: Prefix
+      - path: /reports(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: reports-service
             port:
               number: 80
-      - path: /inventory
-        pathType: Prefix
+      - path: /inventory(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: inventory-service
             port:
               number: 80
-      - path: /commercial
-        pathType: Prefix
+      - path: /commercial(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: commercial-service
             port:
               number: 80
-      - path: /notification
-        pathType: Prefix
+      - path: /notification(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: notification-service
             port:
               number: 80
-      - path: /payment
-        pathType: Prefix
+      - path: /payment(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: payment-service
             port:
               number: 80
-      - path: /health-copilot
-        pathType: Prefix
+      - path: /health-copilot(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: health-copilot

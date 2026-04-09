@@ -85,7 +85,7 @@ module "sqs" {
 
 module "irsa" {
   source = "./modules/irsa"
-  
+
   project_name           = var.project_name
   environment            = var.environment
   eks_oidc_issuer_url    = module.eks.oidc_issuer_url

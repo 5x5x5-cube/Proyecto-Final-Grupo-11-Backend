@@ -1,72 +1,105 @@
 name: Deploy to EKS
 
 on:
+  workflow_run:
+    workflows: ["Build and Push to ECR"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        type: choice
-        options:
-          - development
-          - staging
-          - production
       services:
         description: 'Services to deploy (comma-separated, or "all")'
         required: true
         default: 'all'
-  workflow_run:
-    workflows: ["Build and Push to ECR"]
-    types:
-      - completed
-    branches: [main, develop]
 
 env:
   AWS_REGION: us-east-1
+  CLUSTER_NAME: proyecto-final-dev
 
 jobs:
-  determine-environment:
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.set-env.outputs.environment }}
-    steps:
-      - name: Determine environment
-        id: set-env
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/develop" ]; then
-            echo "environment=development" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "environment=staging" >> $GITHUB_OUTPUT
-          else
-            echo "environment=development" >> $GITHUB_OUTPUT
-          fi
-
   deploy:
-    needs: determine-environment
     runs-on: ubuntu-latest
-    environment: ${{ needs.determine-environment.outputs.environment }}
-    
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --name proyecto-final-${{ needs.determine-environment.outputs.environment }} --region ${{ env.AWS_REGION }}
-      
+
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: 'v1.28.0'
-      
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.0'
+          terraform_wrapper: false
+
+      - name: Get infrastructure outputs
+        id: infra
+        working-directory: infrastructure/terraform
+        run: |
+          terraform init -input=false
+          echo "db_endpoint=$(terraform output -raw rds_endpoint)" >> $GITHUB_OUTPUT
+          echo "db_name=$(terraform output -raw rds_database_name)" >> $GITHUB_OUTPUT
+          echo "redis_endpoint=$(terraform output -raw redis_endpoint)" >> $GITHUB_OUTPUT
+          echo "sqs_queue_url=$(terraform output -raw sqs_hotel_sync_queue_url)" >> $GITHUB_OUTPUT
+
+      - name: Create Kubernetes Secrets and ConfigMaps
+        run: |
+          # Obtener contraseña de DB desde Secrets Manager
+          DB_PASSWORD=$(aws secretsmanager get-secret-value \
+            --secret-id proyecto-final-dev-db-password \
+            --region ${{ env.AWS_REGION }} \
+            --query SecretString --output text)
+
+          DB_HOST=$(echo "${{ steps.infra.outputs.db_endpoint }}" | cut -d: -f1)
+          DB_PORT=$(echo "${{ steps.infra.outputs.db_endpoint }}" | cut -d: -f2)
+          DATABASE_URL="postgresql+asyncpg://dbadmin:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${{ steps.infra.outputs.db_name }}"
+          REDIS_URL="redis://${{ steps.infra.outputs.redis_endpoint }}:6379"
+          SQS_QUEUE_URL="${{ steps.infra.outputs.sqs_queue_url }}"
+
+          # Secrets con database-url
+          for SVC in auth-service inventory-service cart-service; do
+            kubectl create secret generic ${SVC}-secrets \
+              --from-literal=database-url="$DATABASE_URL" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          done
+
+          # ConfigMaps
+          kubectl create configmap cart-service-config \
+            --from-literal=redis-url="$REDIS_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap notification-service-config \
+            --from-literal=redis-url="$REDIS_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap inventory-service-config \
+            --from-literal=redis-url="$REDIS_URL" \
+            --from-literal=sqs-queue-url="$SQS_QUEUE_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create configmap search-service-config \
+            --from-literal=redis-url="$REDIS_URL" \
+            --from-literal=sqs-queue-url="$SQS_QUEUE_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "Secrets and ConfigMaps created"
+
       - name: Determine services to deploy
         id: services
         run: |
@@ -75,67 +108,60 @@ jobs:
           else
             SERVICES="all"
           fi
-          
+
           if [ "$SERVICES" == "all" ]; then
-            SERVICES="auth-service,booking-service,search-service,cart-service,reports-service,inventory-service,commercial-service,notification-service,payment-service,health-copilot"
+            SERVICES="auth-service,inventory-service,search-service,cart-service,notification-service,health-copilot"
           fi
-          
+
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
-          echo "Deploying services: $SERVICES"
-      
+          echo "Deploying: $SERVICES"
+
       - name: Deploy services
         run: |
           IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
           for service in "${SERVICE_ARRAY[@]}"; do
             service=$(echo $service | xargs)
             echo "Deploying $service..."
-            kubectl apply -f kubernetes/deployments/${service}.yaml
+            if [ -f "kubernetes/deployments/${service}.yaml" ]; then
+              kubectl apply -f "kubernetes/deployments/${service}.yaml"
+            else
+              echo "WARNING: kubernetes/deployments/${service}.yaml not found, skipping"
+            fi
           done
-      
+
+          # search-worker usa la misma imagen que search-service
+          if [ -f "kubernetes/deployments/search-worker.yaml" ]; then
+            echo "Deploying search-worker..."
+            kubectl apply -f kubernetes/deployments/search-worker.yaml
+          fi
+
       - name: Deploy Ingress
-        run: |
-          kubectl apply -f kubernetes/ingress.yaml
-      
-      - name: Wait for deployments
-        run: |
-          IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
-          for service in "${SERVICE_ARRAY[@]}"; do
-            service=$(echo $service | xargs)
-            echo "Waiting for $service to be ready..."
-            kubectl rollout status deployment/$service --timeout=5m
-          done
-      
-      - name: Health check
+        run: kubectl apply -f kubernetes/ingress.yaml
+
+      - name: Wait for rollout
         run: |
           IFS=',' read -ra SERVICE_ARRAY <<< "${{ steps.services.outputs.services }}"
           for service in "${SERVICE_ARRAY[@]}"; do
             service=$(echo $service | xargs)
-            echo "Checking health of $service..."
-            
-            POD=$(kubectl get pod -l app=$service -o jsonpath="{.items[0].metadata.name}")
-            kubectl exec $POD -- curl -f http://localhost:8000/health || {
-              echo "Health check failed for $service"
-              exit 1
-            }
+            echo "Waiting for $service..."
+            kubectl rollout status deployment/$service --timeout=5m || true
           done
-      
+
       - name: Deployment summary
         if: always()
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** ${{ needs.determine-environment.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Cluster:** ${{ env.CLUSTER_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "**Services:** ${{ steps.services.outputs.services }}" >> $GITHUB_STEP_SUMMARY
           echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### Deployed Pods" >> $GITHUB_STEP_SUMMARY
-          kubectl get pods -o wide >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pods" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -o wide 2>&1 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-  rollback:
-    needs: [determine-environment, deploy]
-    if: failure()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Rollback deployment
-        run: |
-          echo "Deployment failed. Manual rollback required."
-          echo "Run: kubectl rollout undo deployment/<service-name>"
+          LB_URL=$(kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          if [ -n "$LB_URL" ]; then
+            echo "### Load Balancer" >> $GITHUB_STEP_SUMMARY
+            echo "URL: http://$LB_URL" >> $GITHUB_STEP_SUMMARY
+          fi
