@@ -120,7 +120,7 @@ DATABASE_URL="postgresql+asyncpg://dbadmin:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/
 REDIS_URL="redis://${REDIS_ENDPOINT}:6379"
 
 # Secrets con database-url por servicio
-for SVC in auth-service inventory-service cart-service; do
+for SVC in auth-service inventory-service cart-service payment-service booking-service; do
     kubectl create secret generic ${SVC}-secrets \
       --from-literal=database-url="$DATABASE_URL" \
       --dry-run=client -o yaml | kubectl apply -f -
@@ -160,7 +160,7 @@ echo ""
 echo -e "${YELLOW}Paso 7: Construir y subir imágenes Docker${NC}"
 echo "Esto tomará varios minutos..."
 
-SERVICES=("auth-service" "inventory-service" "search-service" "cart-service" "notification-service" "health-copilot")
+SERVICES=("auth-service" "inventory-service" "search-service" "cart-service" "notification-service" "health-copilot" "payment-service" "booking-service")
 
 for SERVICE in "${SERVICES[@]}"; do
     echo ""
@@ -203,6 +203,8 @@ DEPLOY_YAMLS=(
     "kubernetes/deployments/cart-service.yaml"
     "kubernetes/deployments/notification-service.yaml"
     "kubernetes/deployments/health-copilot.yaml"
+    "kubernetes/deployments/payment-service.yaml"
+    "kubernetes/deployments/booking-service.yaml"
 )
 
 for YAML in "${DEPLOY_YAMLS[@]}"; do
