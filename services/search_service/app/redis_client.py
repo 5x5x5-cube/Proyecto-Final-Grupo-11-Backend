@@ -52,7 +52,9 @@ class RedisClient:
                 (
                     TagField("$.room_id", as_name="room_id"),
                     TextField("$.date", as_name="date"),
-                    NumericField("$.available_quantity", as_name="available_quantity", sortable=True),
+                    NumericField(
+                        "$.available_quantity", as_name="available_quantity", sortable=True
+                    ),
                 ),
                 IndexDefinition(prefix=["availability:"], index_type=IndexType.JSON),
             )
@@ -79,7 +81,7 @@ class RedisClient:
             try:
                 self.client.json().set(key, "$", data)
                 return
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         self.client.set(key, json_module.dumps(data))
 
@@ -90,7 +92,7 @@ class RedisClient:
                 if result and isinstance(result, list):
                     return result[0] if path and path != "$" else result
                 return result
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         raw = self.client.get(key)
         if raw is None:

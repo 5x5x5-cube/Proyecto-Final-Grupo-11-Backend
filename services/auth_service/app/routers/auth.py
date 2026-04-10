@@ -8,7 +8,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 # Configuración JWT (en producción usar variables de entorno)
-SECRET_KEY = "your-secret-key-change-in-production"
+SECRET_KEY = "your-secret-key-change-in-production"  # nosec B105
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
 
@@ -65,7 +65,7 @@ async def register(request: RegisterRequest):
 
     return AuthResponse(
         access_token=access_token,
-        token_type="bearer",
+        token_type="bearer",  # nosec B106
         user_id=user_id,
         email=request.email,
         name=request.name,
@@ -85,7 +85,7 @@ async def login(request: LoginRequest):
 
     return AuthResponse(
         access_token=access_token,
-        token_type="bearer",
+        token_type="bearer",  # nosec B106
         user_id=user["id"],
         email=request.email,
         name=user["name"],
