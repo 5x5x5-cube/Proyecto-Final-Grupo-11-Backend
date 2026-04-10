@@ -126,7 +126,8 @@ class SearchService:
                 return rooms_data
 
             return [
-                r for r in rooms_data
+                r
+                for r in rooms_data
                 if indexer.is_room_available_for_dates(r.get("id"), check_in, check_out)
             ]
         except Exception as e:
