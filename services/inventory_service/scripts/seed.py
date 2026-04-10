@@ -36,6 +36,7 @@ async def wait_for_sqs(retries: int = 10, delay: int = 3) -> bool:
     print("SQS queue not available after retries, skipping publish.")
     return False
 
+
 HOTELS = [
     {
         "id": uuid.UUID("a1000000-0000-0000-0000-000000000001"),
@@ -257,11 +258,13 @@ async def seed(db_url: str | None = None) -> None:
                     db.add(avail)
 
                     if sqs_ready:
-                        await sqs_publisher.publish_availability_created({
-                            "room_id": str(room.id),
-                            "date": str(d),
-                            "available_quantity": room_data["total_quantity"],
-                        })
+                        await sqs_publisher.publish_availability_created(
+                            {
+                                "room_id": str(room.id),
+                                "date": str(d),
+                                "available_quantity": room_data["total_quantity"],
+                            }
+                        )
 
         await db.commit()
         print(
