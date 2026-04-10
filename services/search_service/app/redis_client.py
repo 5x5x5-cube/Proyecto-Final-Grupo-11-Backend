@@ -81,7 +81,7 @@ class RedisClient:
             try:
                 self.client.json().set(key, "$", data)
                 return
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         self.client.set(key, json_module.dumps(data))
 
@@ -92,7 +92,7 @@ class RedisClient:
                 if result and isinstance(result, list):
                     return result[0] if path and path != "$" else result
                 return result
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         raw = self.client.get(key)
         if raw is None:
