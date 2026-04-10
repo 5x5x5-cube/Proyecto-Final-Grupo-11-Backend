@@ -52,7 +52,9 @@ class RedisClient:
                 (
                     TagField("$.room_id", as_name="room_id"),
                     TextField("$.date", as_name="date"),
-                    NumericField("$.available_quantity", as_name="available_quantity", sortable=True),
+                    NumericField(
+                        "$.available_quantity", as_name="available_quantity", sortable=True
+                    ),
                 ),
                 IndexDefinition(prefix=["availability:"], index_type=IndexType.JSON),
             )
