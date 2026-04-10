@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 import uuid
 from datetime import datetime, timedelta
+
 import jwt
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -48,7 +49,7 @@ async def register(request: RegisterRequest):
     # Verificar si el usuario ya existe
     if request.email in users_db:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
     # Crear nuevo usuario
     user_id = str(uuid.uuid4())
     users_db[request.email] = {
@@ -56,20 +57,18 @@ async def register(request: RegisterRequest):
         "email": request.email,
         "password": request.password,  # En producción: hashear con bcrypt
         "name": request.name,
-        "created_at": datetime.utcnow()
+        "created_at": datetime.utcnow(),
     }
-    
+
     # Crear token
-    access_token = create_access_token(
-        data={"sub": user_id, "email": request.email}
-    )
-    
+    access_token = create_access_token(data={"sub": user_id, "email": request.email})
+
     return AuthResponse(
         access_token=access_token,
         token_type="bearer",
         user_id=user_id,
         email=request.email,
-        name=request.name
+        name=request.name,
     )
 
 
@@ -80,18 +79,16 @@ async def login(request: LoginRequest):
     user = users_db.get(request.email)
     if not user or user["password"] != request.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Crear token
-    access_token = create_access_token(
-        data={"sub": user["id"], "email": request.email}
-    )
-    
+    access_token = create_access_token(data={"sub": user["id"], "email": request.email})
+
     return AuthResponse(
         access_token=access_token,
         token_type="bearer",
         user_id=user["id"],
         email=request.email,
-        name=user["name"]
+        name=user["name"],
     )
 
 
@@ -100,17 +97,16 @@ async def get_current_user(token: str):
     """Obtener información del usuario actual"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
         email = payload.get("email")
-        
+
         user = users_db.get(email)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        
+
         return {
             "user_id": user["id"],
             "email": user["email"],
-            "name": user["name"]
+            "name": user["name"],
         }
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")

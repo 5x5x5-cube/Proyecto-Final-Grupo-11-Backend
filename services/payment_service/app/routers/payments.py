@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 import uuid
 from datetime import datetime
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -32,7 +33,7 @@ class PaymentResponse(BaseModel):
 async def initiate_payment(request: PaymentInitiateRequest):
     """Iniciar un pago"""
     payment_id = str(uuid.uuid4())
-    
+
     payment = {
         "payment_id": payment_id,
         "booking_id": request.booking_id,
@@ -41,11 +42,11 @@ async def initiate_payment(request: PaymentInitiateRequest):
         "status": "pending",
         "payment_method": request.payment_method,
         "created_at": datetime.utcnow().isoformat(),
-        "payment_url": f"https://payment-gateway.example.com/pay/{payment_id}"
+        "payment_url": f"https://payment-gateway.example.com/pay/{payment_id}",
     }
-    
+
     payments_db[payment_id] = payment
-    
+
     return PaymentResponse(**payment)
 
 
@@ -55,7 +56,7 @@ async def get_payment(payment_id: str):
     payment = payments_db.get(payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    
+
     return PaymentResponse(**payment)
 
 
@@ -65,11 +66,15 @@ async def confirm_payment(payment_id: str):
     payment = payments_db.get(payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    
+
     payment["status"] = "completed"
     payment["completed_at"] = datetime.utcnow().isoformat()
-    
-    return {"message": "Payment confirmed", "payment_id": payment_id, "status": "completed"}
+
+    return {
+        "message": "Payment confirmed",
+        "payment_id": payment_id,
+        "status": "completed",
+    }
 
 
 @router.post("/{payment_id}/cancel")
@@ -78,8 +83,12 @@ async def cancel_payment(payment_id: str):
     payment = payments_db.get(payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    
+
     payment["status"] = "cancelled"
     payment["cancelled_at"] = datetime.utcnow().isoformat()
-    
-    return {"message": "Payment cancelled", "payment_id": payment_id, "status": "cancelled"}
+
+    return {
+        "message": "Payment cancelled",
+        "payment_id": payment_id,
+        "status": "cancelled",
+    }
