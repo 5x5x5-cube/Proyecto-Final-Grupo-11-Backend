@@ -153,10 +153,35 @@ terraform destroy
 
 ---
 
+## Autenticación temporal (pre-auth service)
+
+Mientras el servicio de autenticación no emita tokens reales, el Ingress inyecta headers
+por defecto para que los servicios que requieren `X-User-Id` y `X-Hotel-Id` funcionen:
+
+```yaml
+# kubernetes/ingress.yaml — annotation configuration-snippet
+proxy_set_header X-User-Id "c1000000-0000-0000-0000-000000000001";
+proxy_set_header X-Hotel-Id "a1000000-0000-0000-0000-000000000001";
+```
+
+Estos valores corresponden al usuario y hotel seedeados por defecto.
+
+> **⚠️ TODO**: Cuando el auth service esté en producción, eliminar la annotation
+> `nginx.ingress.kubernetes.io/configuration-snippet` del Ingress y hacer que los
+> clientes (web/mobile) envíen el token JWT en el header `Authorization`. El servicio
+> de autenticación debe extraer el `user_id` del token y propagarlo como `X-User-Id`.
+
+**Servicios afectados sin este header**:
+- `cart-service` — retorna 401 sin `X-User-Id`
+- `booking-service` — retorna 401 sin `X-User-Id`
+
+---
+
 ## Troubleshooting
 
 | Problema | Solución |
 |----------|----------|
+| Cart/Booking retorna 401 | Verificar que el Ingress tiene la annotation `configuration-snippet` con `proxy_set_header X-User-Id`. Aplicar con `kubectl apply -f kubernetes/ingress.yaml` |
 | `terraform destroy/apply` falla por lock | `terraform force-unlock <LOCK-ID>` |
 | Error DNS durante terraform | Verificar conexión a internet, reintentar |
 | Secret "scheduled for deletion" | `aws secretsmanager delete-secret --secret-id <id> --region us-east-1 --force-delete-without-recovery` |
