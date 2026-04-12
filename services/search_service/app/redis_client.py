@@ -100,7 +100,7 @@ class RedisClient:
         data = json_module.loads(raw)
         if path and path.startswith("$."):
             field = path[2:]
-            return [data.get(field)]
+            return data.get(field)
         return [data] if isinstance(data, dict) else data
 
     def json_delete(self, key):
