@@ -6,7 +6,11 @@ metadata:
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-origin: "*"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
-    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,X-User-Id,X-Hotel-Id"
+    # TODO: remove these default headers once auth service issues real tokens
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-User-Id "c1000000-0000-0000-0000-000000000001";
+      proxy_set_header X-Hotel-Id "a1000000-0000-0000-0000-000000000001";
 spec:
   ingressClassName: nginx
   rules:
