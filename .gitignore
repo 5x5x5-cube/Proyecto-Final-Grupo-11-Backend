@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.claude/
 
 # Virtual environments
 venv/
@@ -28,6 +29,7 @@ env/
 
 # Poetry
 poetry.lock
+poetry.toml
 
 # Testing
 .pytest_cache/

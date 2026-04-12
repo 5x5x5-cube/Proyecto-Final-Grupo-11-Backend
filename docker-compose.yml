@@ -1,14 +1,39 @@
 version: '3.8'
 
 services:
+  gateway-service:
+    build:
+      context: ./services/gateway_service
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8000"
+    environment:
+      - BOOKING_SERVICE_URL=http://booking-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
+      - SEARCH_SERVICE_URL=http://search-service:8000
+      - DEFAULT_USER_ID=c1000000-0000-0000-0000-000000000001
+      - DEFAULT_HOTEL_ID=a1000000-0000-0000-0000-000000000001
+      # Descomentar a medida que se implementen los servicios:
+      # - AUTH_SERVICE_URL=http://auth-service:8000
+      # - PAYMENT_SERVICE_URL=http://payment-service:8000
+      # - REPORTS_SERVICE_URL=http://reports-service:8000
+      # - NOTIFICATION_SERVICE_URL=http://notification-service:8000
+      # - MONITOR_SERVICE_URL=http://health-copilot:8000
+    depends_on:
+      - booking-service
+      - cart-service
+      - search-service
+    networks:
+      - microservices
+
   auth-service:
     build:
       context: ./services/auth_service
       dockerfile: Dockerfile
     ports:
-      - "8001:8000"
+      - "8011:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -21,9 +46,13 @@ services:
     ports:
       - "8002:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/booking_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/0
+      - INVENTORY_SERVICE_URL=http://inventory-service:8000
     depends_on:
       - postgres
+      - redis
+      - inventory-service
     networks:
       - microservices
 
@@ -33,6 +62,34 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8003:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/hotel-sync-queue
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      - redis
+      - localstack
+    networks:
+      - microservices
+
+  search-worker:
+    build:
+      context: ./services/search_service
+      dockerfile: Dockerfile
+    command: python workers/sqs_worker.py
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/hotel-sync-queue
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      - redis
+      - localstack
     networks:
       - microservices
 
@@ -43,9 +100,13 @@ services:
     ports:
       - "8004:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/0
+      - INVENTORY_SERVICE_URL=http://inventory-service:8000
     depends_on:
+      - postgres
       - redis
+      - inventory-service
     networks:
       - microservices
 
@@ -56,7 +117,7 @@ services:
     ports:
       - "8005:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/reports_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -69,9 +130,17 @@ services:
     ports:
       - "8006:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/inventory_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/0
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/hotel-sync-queue
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
     depends_on:
       - postgres
+      - localstack
+      - redis
     networks:
       - microservices
 
@@ -82,7 +151,7 @@ services:
     ports:
       - "8007:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/commercial_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -108,7 +177,7 @@ services:
     ports:
       - "8009:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/payment_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
     depends_on:
       - postgres
     networks:
@@ -128,7 +197,7 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_MULTIPLE_DATABASES=auth_db,booking_db,reports_db,inventory_db,commercial_db,payment_db
+      - POSTGRES_DB=travelhub
     ports:
       - "5432:5432"
     volumes:
@@ -137,11 +206,25 @@ services:
       - microservices
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack:latest
     ports:
       - "6379:6379"
+      - "8001:8001"
     volumes:
       - redis_data:/data
+    networks:
+      - microservices
+
+  localstack:
+    image: localstack/localstack:3.8.0
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      - "./scripts/localstack:/etc/localstack/init/ready.d"
     networks:
       - microservices
 

@@ -1,3 +1,10 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inventory-service-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-inventory-service-role
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,7 +12,7 @@ metadata:
   labels:
     app: inventory-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: inventory-service
@@ -14,9 +21,10 @@ spec:
       labels:
         app: inventory-service
     spec:
+      serviceAccountName: inventory-service-sa
       containers:
       - name: inventory-service
-        image: ${ECR_REGISTRY}/inventory-service:${IMAGE_TAG}
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-inventory-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -25,6 +33,20 @@ spec:
             secretKeyRef:
               name: inventory-service-secrets
               key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: inventory-service-config
+              key: redis-url
+        - name: SQS_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: inventory-service-config
+              key: sqs-queue-url
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: AWS_ENDPOINT_URL
+          value: ""
         livenessProbe:
           httpGet:
             path: /health
@@ -39,11 +61,11 @@ spec:
           periodSeconds: 5
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "64Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "192Mi"
+            cpu: "250m"
 ---
 apiVersion: v1
 kind: Service
@@ -57,3 +79,4 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+

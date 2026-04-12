@@ -22,3 +22,13 @@ output "cluster_security_group_id" {
   description = "Security group ID attached to the EKS cluster"
   value       = aws_security_group.cluster.id
 }
+
+output "oidc_issuer_url" {
+  description = "OIDC issuer URL for IRSA"
+  value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+output "oidc_provider_arn" {
+  description = "OIDC provider ARN for IRSA"
+  value       = aws_iam_openid_connect_provider.eks.arn
+}

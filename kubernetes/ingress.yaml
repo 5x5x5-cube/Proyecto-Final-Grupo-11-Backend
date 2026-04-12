@@ -3,84 +3,102 @@ kind: Ingress
 metadata:
   name: api-gateway
   annotations:
-    kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/healthcheck-path: /health
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
 spec:
+  ingressClassName: nginx
   rules:
-  - host: api.yourdomain.com
-    http:
+  - http:
       paths:
-      - path: /auth
+      - path: /api/v1/auth
         pathType: Prefix
         backend:
           service:
             name: auth-service
             port:
               number: 80
-      - path: /booking
+      - path: /api/v1/booking
         pathType: Prefix
         backend:
           service:
             name: booking-service
             port:
               number: 80
-      - path: /search
+      - path: /api/v1/search
         pathType: Prefix
         backend:
           service:
             name: search-service
             port:
               number: 80
-      - path: /cart
+      - path: /api/v1/cart
         pathType: Prefix
         backend:
           service:
             name: cart-service
             port:
               number: 80
-      - path: /reports
+      - path: /api/v1/reports
         pathType: Prefix
         backend:
           service:
             name: reports-service
             port:
               number: 80
-      - path: /inventory
+      - path: /api/v1/inventory
         pathType: Prefix
         backend:
           service:
             name: inventory-service
             port:
               number: 80
-      - path: /commercial
+      - path: /api/v1/commercial
         pathType: Prefix
         backend:
           service:
             name: commercial-service
             port:
               number: 80
-      - path: /notification
+      - path: /api/v1/notification
         pathType: Prefix
         backend:
           service:
             name: notification-service
             port:
               number: 80
-      - path: /payment
+      - path: /api/v1/payment
         pathType: Prefix
         backend:
           service:
             name: payment-service
             port:
               number: 80
-      - path: /health-copilot
+      - path: /api/v1/health-copilot
         pathType: Prefix
         backend:
           service:
             name: health-copilot
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: inventory-webhook
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /inventory(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: inventory-service
             port:
               number: 80

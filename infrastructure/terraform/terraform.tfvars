@@ -5,11 +5,11 @@ environment = "dev"
 vpc_cidr = "10.0.0.0/16"
 availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
 
-cluster_version = "1.28"
-node_instance_types = ["t3.medium"]
-node_desired_size = 3
-node_min_size = 2
-node_max_size = 6
+cluster_version = "1.31"
+node_instance_types = ["t3.small"]
+node_desired_size = 1
+node_min_size = 1
+node_max_size = 2
 
 ecr_repositories = [
   "auth-service",
@@ -24,6 +24,9 @@ ecr_repositories = [
   "health-copilot"
 ]
 
+redis_node_type = "cache.t3.micro"
+redis_num_cache_nodes = 1
+
 db_instance_class = "db.t3.micro"
 db_name = "proyectofinal"
-db_username = "admin"
+db_username = "dbadmin"

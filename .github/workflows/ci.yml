@@ -117,10 +117,13 @@ jobs:
 
       - name: Validate commit messages
         run: |
-          COMMITS=$(git log --format=%s ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          COMMITS=$(git log --format=%s --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
           PATTERN='^(feat|fix|docs|style|refactor|test|chore|revert|ci)(\(.+\))?: .+'
           FAILED=0
           while IFS= read -r msg; do
+            if [[ -z "$msg" ]]; then
+              continue
+            fi
             if [[ ! "$msg" =~ $PATTERN ]]; then
               echo "❌ Invalid commit message: $msg"
               FAILED=1
@@ -137,7 +140,7 @@ jobs:
           fi
 
   all-tests-passed:
-    needs: [lint-and-test, commitlint]
+    needs: [detect-changes, lint-and-test, commitlint]
     runs-on: ubuntu-latest
     if: always()
     steps:

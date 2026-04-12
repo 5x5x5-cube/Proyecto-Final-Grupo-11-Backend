@@ -31,31 +31,31 @@ variable "availability_zones" {
 variable "cluster_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "1.28"
+  default     = "1.31"
 }
 
 variable "node_instance_types" {
   description = "EC2 instance types for EKS nodes"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "node_desired_size" {
   description = "Desired number of nodes"
   type        = number
-  default     = 3
+  default     = 1
 }
 
 variable "node_min_size" {
   description = "Minimum number of nodes"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "node_max_size" {
   description = "Maximum number of nodes"
   type        = number
-  default     = 6
+  default     = 2
 }
 
 variable "ecr_repositories" {
@@ -73,6 +73,18 @@ variable "ecr_repositories" {
     "payment-service",
     "health-copilot"
   ]
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type"
+  type        = string
+  default     = "cache.t3.micro"
+}
+
+variable "redis_num_cache_nodes" {
+  description = "Number of Redis cache nodes"
+  type        = number
+  default     = 1
 }
 
 variable "db_instance_class" {

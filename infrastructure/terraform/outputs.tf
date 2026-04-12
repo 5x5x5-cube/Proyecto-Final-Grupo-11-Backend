@@ -33,3 +33,28 @@ output "rds_database_name" {
   description = "RDS database name"
   value       = module.rds.db_name
 }
+
+output "redis_endpoint" {
+  description = "ElastiCache Redis endpoint"
+  value       = module.elasticache.redis_endpoint
+}
+
+output "sqs_hotel_sync_queue_url" {
+  description = "SQS hotel sync queue URL"
+  value       = module.sqs.hotel_sync_queue_url
+}
+
+output "sqs_hotel_sync_dlq_url" {
+  description = "SQS hotel sync DLQ URL"
+  value       = module.sqs.hotel_sync_dlq_url
+}
+
+output "inventory_service_role_arn" {
+  description = "IAM role ARN for inventory-service IRSA"
+  value       = module.irsa.inventory_service_role_arn
+}
+
+output "search_service_role_arn" {
+  description = "IAM role ARN for search-service IRSA"
+  value       = module.irsa.search_service_role_arn
+}
