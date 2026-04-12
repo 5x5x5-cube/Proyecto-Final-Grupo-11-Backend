@@ -271,7 +271,7 @@ def test_get_hotel_rooms_calls_get_available_rooms(mock_redis):
 def test_is_room_available_for_dates_all_available(mock_redis):
     """Habitación disponible en todas las fechas retorna True"""
     with patch("app.services.redis_indexer.redis_client") as mock_rc:
-        mock_rc.json_get.return_value = [2]
+        mock_rc.json_get.return_value = 2
 
         from app.services.redis_indexer import RedisIndexer
 
