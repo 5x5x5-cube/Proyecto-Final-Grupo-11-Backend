@@ -131,8 +131,8 @@ class RedisIndexer:
         for d in dates:
             key = f"availability:{room_id}:{d}"
             try:
-                result = self.rc.json_get(key, "$.available_quantity")
-                if not result or result[0] <= 0:
+                qty = self.rc.json_get(key, "$.available_quantity")
+                if not qty or qty <= 0:
                     return False
             except Exception:
                 return False
