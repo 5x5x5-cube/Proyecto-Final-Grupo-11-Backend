@@ -13,9 +13,12 @@ class SQSConsumer:
     def __init__(self):
         client_kwargs = {
             "region_name": settings.aws_region,
-            "aws_access_key_id": settings.aws_access_key_id,
-            "aws_secret_access_key": settings.aws_secret_access_key,
         }
+        # Only use explicit credentials if they are not the default 'test' values
+        # Otherwise, let boto3 use the IAM role from the service account
+        if settings.aws_access_key_id and settings.aws_access_key_id != "test":
+            client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
         if settings.aws_endpoint_url:
             client_kwargs["endpoint_url"] = settings.aws_endpoint_url
         self.client = boto3.client("sqs", **client_kwargs)
@@ -36,6 +39,14 @@ class SQSConsumer:
                     print("No hotel ID in message")
                     return False
 
+                # Convert rating to float if it's a string
+                rating = hotel.get("rating")
+                if rating is not None and isinstance(rating, str):
+                    try:
+                        hotel["rating"] = float(rating)
+                    except (ValueError, TypeError):
+                        hotel["rating"] = None
+
                 if event_type == "created":
                     return indexer.index_hotel(hotel_id, hotel)
                 elif event_type == "updated":
@@ -50,6 +61,28 @@ class SQSConsumer:
                 if not room_id:
                     print("No room ID in message")
                     return False
+
+                # Convert numeric fields to proper types if they are strings
+                price = room.get("price_per_night")
+                if price is not None and isinstance(price, str):
+                    try:
+                        room["price_per_night"] = float(price)
+                    except (ValueError, TypeError):
+                        pass
+
+                tax = room.get("tax_rate")
+                if tax is not None and isinstance(tax, str):
+                    try:
+                        room["tax_rate"] = float(tax)
+                    except (ValueError, TypeError):
+                        pass
+
+                capacity = room.get("capacity")
+                if capacity is not None and isinstance(capacity, str):
+                    try:
+                        room["capacity"] = int(capacity)
+                    except (ValueError, TypeError):
+                        pass
 
                 if event_type == "created":
                     return indexer.index_room(room_id, room)
