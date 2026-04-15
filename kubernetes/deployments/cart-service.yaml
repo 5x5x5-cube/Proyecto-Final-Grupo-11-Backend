@@ -30,6 +30,8 @@ spec:
             configMapKeyRef:
               name: cart-service-config
               key: redis-url
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service:80"
         livenessProbe:
           httpGet:
             path: /health
