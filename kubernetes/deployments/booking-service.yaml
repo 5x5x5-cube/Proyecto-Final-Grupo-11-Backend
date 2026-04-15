@@ -25,6 +25,16 @@ spec:
             secretKeyRef:
               name: booking-service-secrets
               key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: redis-url
+        - name: INVENTORY_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: inventory-service-url
         livenessProbe:
           httpGet:
             path: /health
@@ -57,4 +67,3 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
-
