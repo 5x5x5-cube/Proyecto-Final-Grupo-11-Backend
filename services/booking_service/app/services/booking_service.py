@@ -193,7 +193,19 @@ async def get_hotel_booking(
     booking = result.scalar_one_or_none()
     if not booking:
         raise BookingNotFoundError(str(booking_id))
-    return build_booking_response(booking)
+
+    # Construye el desglose de precios a partir de los campos almacenados en la reserva
+    nights = max((booking.check_out - booking.check_in).days, 1)
+    price_breakdown = PriceBreakdown(
+        pricePerNight=float(booking.base_price) / nights,
+        nights=nights,
+        basePrice=float(booking.base_price),
+        vat=float(booking.tax_amount),
+        serviceFee=float(booking.service_fee),
+        totalPrice=float(booking.total_price),
+        currency=booking.currency,
+    )
+    return build_booking_response(booking, price_breakdown=price_breakdown)
 
 
 async def update_booking_status(
