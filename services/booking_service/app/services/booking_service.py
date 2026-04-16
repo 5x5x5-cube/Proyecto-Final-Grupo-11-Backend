@@ -173,7 +173,7 @@ async def list_hotel_bookings(
     bookings = result.scalars().all()
 
     return HotelBookingListResponse(
-        reservations=[build_booking_response(b) for b in bookings],
+        data=[build_booking_response(b) for b in bookings],
         total=total,
         page=page,
         limit=limit,

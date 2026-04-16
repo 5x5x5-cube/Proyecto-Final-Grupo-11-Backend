@@ -80,7 +80,7 @@ class HotelBookingSummary(BaseModel):
 
 
 class HotelBookingListResponse(BaseModel):
-    reservations: list[BookingResponse]
+    data: list[BookingResponse]
     total: int
     page: int
     limit: int

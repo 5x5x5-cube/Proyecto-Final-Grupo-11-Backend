@@ -191,8 +191,8 @@ async def test_list_hotel_bookings_200():
     assert body["total"] == 1
     assert body["page"] == 1
     assert body["limit"] == 10
-    assert len(body["reservations"]) == 1
-    assert body["reservations"][0]["status"] == "confirmed"
+    assert len(body["data"]) == 1
+    assert body["data"][0]["status"] == "confirmed"
     assert body["summary"]["confirmed"] == 1
     assert body["summary"]["pending"] == 0
 
@@ -211,7 +211,7 @@ async def test_list_hotel_bookings_empty_200():
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 0
-    assert body["reservations"] == []
+    assert body["data"] == []
     assert body["summary"]["total"] == 0
 
 
