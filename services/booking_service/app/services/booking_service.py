@@ -110,7 +110,7 @@ async def create_booking(
         check_in=request.check_in,
         check_out=request.check_out,
         guests=request.guests,
-        status="confirmed",
+        status="pending",
         base_price=request.base_price,
         tax_amount=request.tax_amount,
         service_fee=request.service_fee,
