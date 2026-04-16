@@ -25,6 +25,7 @@ flake8 = "^7.0.0"
 isort = "^5.13.0"
 mypy = "^1.8.0"
 bandit = "^1.7.5"
+greenlet = "^3.4.0"
 
 [build-system]
 requires = ["poetry-core"]
