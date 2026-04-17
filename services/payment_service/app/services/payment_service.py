@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -100,16 +99,15 @@ async def initiate_payment(
     await db.refresh(payment)
     await db.refresh(payment_method)
 
-    # 5. Fire gateway adapter in background
-    card_hash = token.method_data.get("numberHash") if token.method_data else None
+    # 5. Submit to gateway for async processing (HTTP call, returns immediately)
     webhook_url = f"{settings.payment_service_url}/api/v1/payments/{payment.id}/confirmation"
 
-    asyncio.create_task(
-        payment_adapter.process_payment_async(
-            payment_id=payment.id,
-            card_number_hash=card_hash,
-            webhook_url=webhook_url,
-        )
+    await payment_adapter.submit_to_gateway(
+        payment_id=payment.id,
+        token=token.token,
+        amount=float(payment.amount),
+        currency=payment.currency,
+        webhook_url=webhook_url,
     )
 
     return _build_payment_response(payment, payment_method)

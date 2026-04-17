@@ -214,7 +214,9 @@ class TestInitiateEndpoint:
         db.refresh = AsyncMock(side_effect=fake_refresh)
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
         # Adapter fires in background — mock it to not actually sleep/call webhook
-        mock_adapter.process_payment_async = AsyncMock()
+        mock_adapter.submit_to_gateway = AsyncMock(
+            return_value=MagicMock(transaction_id="txn_mock", status="pending")
+        )
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -258,7 +260,9 @@ class TestInitiateEndpoint:
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
-        mock_adapter.process_payment_async = AsyncMock()
+        mock_adapter.submit_to_gateway = AsyncMock(
+            return_value=MagicMock(transaction_id="txn_mock", status="pending")
+        )
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:

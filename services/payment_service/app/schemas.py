@@ -97,6 +97,23 @@ class TokenizeResponse(BaseModel):
 # ── Webhook (gateway callback) ──
 
 
+class GatewayProcessRequest(BaseModel):
+    payment_id: str = Field(..., alias="paymentId")
+    token: str
+    amount: float
+    currency: str
+    webhook_url: str = Field(..., alias="webhookUrl")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class GatewayProcessResponse(BaseModel):
+    transaction_id: str = Field(..., alias="transactionId")
+    status: str
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 class PaymentConfirmationWebhook(BaseModel):
     payment_id: uuid.UUID = Field(..., alias="paymentId")
     approved: bool
