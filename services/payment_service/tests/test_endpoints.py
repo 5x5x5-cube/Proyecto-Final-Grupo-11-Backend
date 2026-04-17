@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.database import get_db
 from app.main import app
-from app.models import Payment, PaymentToken
+from app.models import Payment, PaymentToken, UserPaymentMethod
 from app.schemas import CartData
 from app.services.token_service import hash_card_number
 
@@ -68,20 +68,31 @@ def _make_token(
     )
 
 
-def _make_payment(token: PaymentToken, status: str = "approved") -> Payment:
+def _make_payment_method(token: PaymentToken) -> UserPaymentMethod:
+    return UserPaymentMethod(
+        id=uuid.uuid4(),
+        user_id=USER_ID,
+        gateway_token=token.token,
+        method_type="credit_card",
+        display_label=token.display_label,
+        card_last4=token.method_data.get("last4"),
+        card_brand=token.method_data.get("brand"),
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+def _make_payment(pm: UserPaymentMethod, status: str = "approved") -> Payment:
     return Payment(
         id=uuid.uuid4(),
-        booking_id=None,
-        booking_code=None,
         user_id=USER_ID,
+        payment_method_id=pm.id,
         amount=500000.00,
         currency="COP",
-        method="credit_card",
         status=status,
-        token_id=token.id,
-        display_label=token.display_label,
         transaction_id="txn_abc123",
         error_code=None,
+        booking_id=None,
+        booking_code=None,
         created_at=datetime.now(timezone.utc),
         processed_at=datetime.now(timezone.utc),
     )
@@ -118,7 +129,7 @@ class TestTokenizeEndpoint:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
-                    "/api/v1/payments/tokenize",
+                    "/api/v1/gateway/tokenize",
                     json={
                         "method": "credit_card",
                         "cardNumber": "4242424242424242",
@@ -145,7 +156,7 @@ class TestTokenizeEndpoint:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post(
-                    "/api/v1/payments/tokenize",
+                    "/api/v1/gateway/tokenize",
                     json={
                         "method": "credit_card",
                         "cardNumber": "1234567890123456",
@@ -164,7 +175,7 @@ class TestTokenizeEndpoint:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/api/v1/payments/tokenize",
+                "/api/v1/gateway/tokenize",
                 json={
                     "method": "credit_card",
                     "cardNumber": "4242424242424242",
@@ -203,7 +214,9 @@ class TestInitiateEndpoint:
         db.refresh = AsyncMock(side_effect=fake_refresh)
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
         # Adapter fires in background — mock it to not actually sleep/call webhook
-        mock_adapter.process_payment_async = AsyncMock()
+        mock_adapter.submit_to_gateway = AsyncMock(
+            return_value=MagicMock(transaction_id="txn_mock", status="pending")
+        )
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -222,8 +235,9 @@ class TestInitiateEndpoint:
             assert response.status_code == 202
             data = response.json()
             assert data["status"] == "processing"
-            assert data["cardLast4"] == "4242"
             assert data["paymentId"] is not None
+            assert data["paymentMethod"]["cardLast4"] == "4242"
+            assert data["paymentMethod"]["displayLabel"] == "Visa •••• 4242"
             assert data["message"] is None  # no message while processing
         finally:
             app.dependency_overrides.clear()
@@ -246,7 +260,9 @@ class TestInitiateEndpoint:
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
-        mock_adapter.process_payment_async = AsyncMock()
+        mock_adapter.submit_to_gateway = AsyncMock(
+            return_value=MagicMock(transaction_id="txn_mock", status="pending")
+        )
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -341,16 +357,17 @@ class TestInitiateEndpoint:
 class TestGetPaymentEndpoint:
     async def test_get_payment_found(self):
         token = _make_token()
-        payment = _make_payment(token)
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm)
 
         db = AsyncMock()
 
-        # First call returns Payment, second returns PaymentToken
+        # First call returns Payment, second returns UserPaymentMethod
         payment_result = MagicMock()
         payment_result.scalar_one_or_none.return_value = payment
-        token_result = MagicMock()
-        token_result.scalar_one_or_none.return_value = token
-        db.execute = AsyncMock(side_effect=[payment_result, token_result])
+        pm_result = MagicMock()
+        pm_result.scalar_one_or_none.return_value = pm
+        db.execute = AsyncMock(side_effect=[payment_result, pm_result])
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -393,7 +410,8 @@ class TestConfirmationWebhook:
     async def test_webhook_approves_payment(self, mock_notify):
         """Webhook updates payment from processing to approved."""
         token = _make_token()
-        payment = _make_payment(token, status="processing")
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="processing")
 
         db = AsyncMock()
         mock_result = MagicMock()
@@ -424,7 +442,8 @@ class TestConfirmationWebhook:
     async def test_webhook_declines_payment(self, mock_notify):
         """Webhook updates payment from processing to declined."""
         token = _make_token()
-        payment = _make_payment(token, status="processing")
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="processing")
 
         db = AsyncMock()
         mock_result = MagicMock()

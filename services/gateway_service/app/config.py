@@ -30,6 +30,7 @@ def get_service_routes() -> dict[str, str | None]:
         "search": settings.search_service_url or None,
         "cart": settings.cart_service_url or None,
         "payments": settings.payment_service_url or None,
+        "gateway": settings.payment_service_url or None,
         "reports": settings.reports_service_url or None,
         "notifications": settings.notification_service_url or None,
         "monitor": settings.monitor_service_url or None,
