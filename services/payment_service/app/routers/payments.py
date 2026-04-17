@@ -1,22 +1,17 @@
+"""Payment service endpoints — our domain."""
+
 import uuid
-from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from ..schemas import (
-    InitiatePaymentRequest,
-    PaymentConfirmationWebhook,
-    PaymentResponse,
-    TokenizeResponse,
-)
+from ..schemas import InitiatePaymentRequest, PaymentConfirmationWebhook, PaymentResponse
 from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import confirm_payment
 from ..services.payment_service import get_payment as get_payment_svc
-from ..services.payment_service import initiate_payment, tokenize_method
+from ..services.payment_service import initiate_payment
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -32,31 +27,15 @@ def get_user_id(request: Request) -> uuid.UUID:
         raise HTTPException(status_code=401, detail="Invalid X-User-Id header")
 
 
-@router.post("/tokenize", response_model=TokenizeResponse, status_code=201)
-async def tokenize_endpoint(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Tokenize payment method data. Accepts card, wallet, or transfer based on 'method' field."""
-    body: Dict[str, Any] = await request.json()
-    try:
-        return await tokenize_method(db=db, body=body)
-    except InvalidTokenError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors())
-
-
 @router.post("/initiate", response_model=PaymentResponse, status_code=202)
 async def initiate_payment_endpoint(
     request: InitiatePaymentRequest,
     user_id: uuid.UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Initiate a payment. Returns 202 immediately; client polls GET /{id} for result.
+    """Initiate a payment. Tokenizes via gateway, saves payment method, fires adapter.
 
-    The simulated Payment Adapter processes asynchronously (2-6s) and calls
-    back the /confirmation webhook when done.
+    Returns 202 immediately; client polls GET /{id} for result.
     """
     try:
         return await initiate_payment(db=db, user_id=user_id, request=request)
@@ -78,8 +57,7 @@ async def payment_confirmation_webhook(
 ):
     """Webhook called by the Payment Adapter after processing.
 
-    This is an internal endpoint — not called by clients.
-    Updates the payment status and publishes SQS notification.
+    Internal endpoint — not called by clients.
     """
     if webhook.payment_id != payment_id:
         raise HTTPException(status_code=400, detail="Payment ID mismatch")

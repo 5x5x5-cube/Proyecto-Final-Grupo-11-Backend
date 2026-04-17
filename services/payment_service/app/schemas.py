@@ -175,17 +175,25 @@ class PaymentDeclinedEvent(BaseModel):
 # ── Response ──
 
 
+class PaymentMethodResponse(BaseModel):
+    id: uuid.UUID
+    method_type: str = Field(..., alias="methodType")
+    display_label: str = Field(..., alias="displayLabel")
+    card_last4: str | None = Field(None, alias="cardLast4")
+    card_brand: str | None = Field(None, alias="cardBrand")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 class PaymentResponse(BaseModel):
     payment_id: uuid.UUID = Field(..., alias="paymentId")
     status: str
-    booking_id: uuid.UUID | None = Field(None, alias="bookingId")
-    booking_code: str | None = Field(None, alias="bookingCode")
+    payment_method: PaymentMethodResponse | None = Field(None, alias="paymentMethod")
     amount: float
     currency: str
-    method: str
-    card_last4: str | None = Field(None, alias="cardLast4")
-    card_brand: str | None = Field(None, alias="cardBrand")
     transaction_id: str | None = Field(None, alias="transactionId")
+    booking_id: uuid.UUID | None = Field(None, alias="bookingId")
+    booking_code: str | None = Field(None, alias="bookingCode")
     message: str | None = None
     created_at: datetime = Field(..., alias="createdAt")
     processed_at: datetime | None = Field(None, alias="processedAt")

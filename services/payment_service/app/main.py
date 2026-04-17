@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from .routers import payments_router
+from .routers import gateway_router, payments_router
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(payments_router)
+app.include_router(gateway_router)
 
 
 # --- Exception handlers ---

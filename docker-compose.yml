@@ -15,7 +15,7 @@ services:
       - DEFAULT_HOTEL_ID=a1000000-0000-0000-0000-000000000001
       # Descomentar a medida que se implementen los servicios:
       # - AUTH_SERVICE_URL=http://auth-service:8000
-      # - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
       # - REPORTS_SERVICE_URL=http://reports-service:8000
       # - NOTIFICATION_SERVICE_URL=http://notification-service:8000
       # - MONITOR_SERVICE_URL=http://health-copilot:8000
