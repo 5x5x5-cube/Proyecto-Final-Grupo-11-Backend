@@ -147,7 +147,7 @@ The payment service fetches the cart internally to get pricing and booking data.
 }
 ```
 
-**Important:** Status `202` means the payment is being processed. Do not navigate away — start polling.
+**Important:** Status `202` means the payment is being processed asynchronously by the Payment Adapter (simulated gateway with 2-6 second delay). Do not navigate away — start polling immediately.
 
 ### Errors
 
@@ -255,4 +255,18 @@ Wallet and transfer methods always succeed in the simulated gateway.
 
 ## Architecture note
 
-The payment service does **not** create bookings directly. On approval, it publishes a `payment_confirmed` event to SQS containing the full cart data. A downstream consumer (PaymentConfirmation) picks up the event and creates the booking via the booking service. This is why `bookingId`/`bookingCode` may not be immediately available in the payment response.
+```
+Client → POST /initiate → 202 (processing)
+         ↓
+         Payment Adapter (async, 2-6s delay)
+         ↓
+         POST /{id}/confirmation (internal webhook)
+         ↓
+         Update status → Publish SQS event
+         ↓
+Client → GET /{id} → approved / declined
+```
+
+- The **Payment Adapter** is a simulated external gateway that processes asynchronously and calls back the payment service via an internal webhook (`POST /payments/{id}/confirmation`).
+- On approval, the payment service publishes a `payment_confirmed` event to SQS. A downstream consumer (PaymentConfirmation) picks up the event and creates the booking via the booking service.
+- The payment service does **not** create bookings directly. This is why `bookingId`/`bookingCode` are null in the payment response.
