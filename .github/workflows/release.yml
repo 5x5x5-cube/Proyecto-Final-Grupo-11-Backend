@@ -62,10 +62,10 @@ jobs:
         id: notes
         run: |
           PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
-          if [ -z "$PREV_TAG" ]; then
-            NOTES=$(git log --oneline --no-merges HEAD~20..HEAD~1)
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log --oneline --no-merges "${PREV_TAG}..HEAD~1" 2>/dev/null || echo "Initial release")
           else
-            NOTES=$(git log --oneline --no-merges "${PREV_TAG}..HEAD~1")
+            NOTES=$(git log --oneline --no-merges -20 HEAD~1 2>/dev/null || echo "Initial release")
           fi
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
