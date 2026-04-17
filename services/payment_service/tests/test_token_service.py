@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.exceptions import InvalidTokenError
-from app.services.token_service import create_token, detect_brand, hash_card_number, validate_luhn
+from app.services.token_service import (
+    create_card_token,
+    detect_brand,
+    hash_card_number,
+    validate_luhn,
+)
 
 # ---------------------------------------------------------------------------
 # Luhn validation
@@ -79,16 +84,17 @@ class TestDetectBrand:
 class TestCreateToken:
     async def test_create_token_valid_card(self):
         db = AsyncMock()
-        token = await create_token(
+        token = await create_card_token(
+            method="credit_card",
             db=db,
             card_number="4242424242424242",
             card_holder="John Doe",
             expiry="12/30",
             cvv="123",
         )
-        assert token.card_last4 == "4242"
-        assert token.card_brand == "visa"
-        assert token.card_holder == "John Doe"
+        assert token.method_data["last4"] == "4242"
+        assert token.method_data["brand"] == "visa"
+        assert token.method_data["holder"] == "John Doe"
         assert token.token.startswith("tok_")
         assert token.expires_at > datetime.now(timezone.utc)
         db.add.assert_called_once()
@@ -97,7 +103,8 @@ class TestCreateToken:
     async def test_create_token_invalid_luhn(self):
         db = AsyncMock()
         with pytest.raises(InvalidTokenError, match="Invalid card number"):
-            await create_token(
+            await create_card_token(
+                method="credit_card",
                 db=db,
                 card_number="1234567890123456",
                 card_holder="John Doe",
@@ -108,7 +115,8 @@ class TestCreateToken:
     async def test_create_token_invalid_cvv(self):
         db = AsyncMock()
         with pytest.raises(InvalidTokenError, match="Invalid CVV"):
-            await create_token(
+            await create_card_token(
+                method="credit_card",
                 db=db,
                 card_number="4242424242424242",
                 card_holder="John Doe",
@@ -119,7 +127,8 @@ class TestCreateToken:
     async def test_create_token_expired_card(self):
         db = AsyncMock()
         with pytest.raises(InvalidTokenError, match="Card has expired"):
-            await create_token(
+            await create_card_token(
+                method="credit_card",
                 db=db,
                 card_number="4242424242424242",
                 card_holder="John Doe",
@@ -130,7 +139,8 @@ class TestCreateToken:
     async def test_create_token_invalid_month(self):
         db = AsyncMock()
         with pytest.raises(InvalidTokenError, match="Invalid expiry month"):
-            await create_token(
+            await create_card_token(
+                method="credit_card",
                 db=db,
                 card_number="4242424242424242",
                 card_holder="John Doe",
@@ -141,20 +151,22 @@ class TestCreateToken:
     async def test_no_cvv_stored_in_token(self):
         """Verify CVV is never stored in the token model."""
         db = AsyncMock()
-        token = await create_token(
+        token = await create_card_token(
+            method="credit_card",
             db=db,
             card_number="4242424242424242",
             card_holder="John Doe",
             expiry="12/30",
             cvv="123",
         )
-        # Ensure model has no cvv attribute
-        assert not hasattr(token, "cvv")
+        # Ensure CVV is never in method_data
+        assert "cvv" not in token.method_data
 
     async def test_card_number_hash_stored(self):
         """Verify the card number hash is stored for gateway matching."""
         db = AsyncMock()
-        token = await create_token(
+        token = await create_card_token(
+            method="credit_card",
             db=db,
             card_number="4242424242424242",
             card_holder="John Doe",
@@ -162,4 +174,4 @@ class TestCreateToken:
             cvv="123",
         )
         expected_hash = hash_card_number("4242424242424242")
-        assert token.card_number_hash == expected_hash
+        assert token.method_data["numberHash"] == expected_hash

@@ -1,13 +1,15 @@
 import uuid
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from ..schemas import InitiatePaymentRequest, PaymentResponse, TokenizeRequest, TokenizeResponse
+from ..schemas import InitiatePaymentRequest, PaymentResponse, TokenizeResponse
 from ..services.payment_service import get_payment as get_payment_svc
-from ..services.payment_service import initiate_payment, tokenize_card
+from ..services.payment_service import initiate_payment, tokenize_method
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -25,14 +27,17 @@ def get_user_id(request: Request) -> uuid.UUID:
 
 @router.post("/tokenize", response_model=TokenizeResponse, status_code=201)
 async def tokenize_endpoint(
-    request: TokenizeRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Tokenize a credit/debit card for secure payment processing."""
+    """Tokenize payment method data. Accepts card, wallet, or transfer based on 'method' field."""
+    body: Dict[str, Any] = await request.json()
     try:
-        return await tokenize_card(db=db, request=request)
+        return await tokenize_method(db=db, body=body)
     except InvalidTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
 
 
 @router.post("/initiate", response_model=PaymentResponse, status_code=202)

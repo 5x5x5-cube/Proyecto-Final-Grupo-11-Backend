@@ -5,26 +5,70 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from ..models import Payment, PaymentToken
-from ..schemas import InitiatePaymentRequest, PaymentResponse, TokenizeRequest, TokenizeResponse
+from ..models import Payment, PaymentMethod, PaymentToken
+from ..schemas import (
+    InitiatePaymentRequest,
+    PaymentResponse,
+    TokenizeCardRequest,
+    TokenizeRequest,
+    TokenizeResponse,
+    TokenizeTransferRequest,
+    TokenizeWalletRequest,
+)
 from . import booking_client, payment_adapter, token_service
 from .sqs_publisher import sqs_publisher
 
 
-async def tokenize_card(db: AsyncSession, request: TokenizeRequest) -> TokenizeResponse:
-    """Tokenize a card for later payment use."""
-    token = await token_service.create_token(
-        db=db,
-        card_number=request.card_number,
-        card_holder=request.card_holder,
-        expiry=request.expiry,
-        cvv=request.cvv,
-    )
+def _parse_tokenize_request(body: dict) -> TokenizeRequest:
+    """Parse and validate a tokenize request body using the discriminated union."""
+    from pydantic import TypeAdapter
+
+    adapter = TypeAdapter(TokenizeRequest)
+    return adapter.validate_python(body)
+
+
+async def tokenize_method(db: AsyncSession, body: dict) -> TokenizeResponse:
+    """Tokenize any payment method (card, wallet, or transfer)."""
+    method = body.get("method", "credit_card")
+    if method not in PaymentMethod._value2member_map_:
+        raise InvalidTokenError(f"Unsupported payment method: {method}")
+
+    request = _parse_tokenize_request(body)
+
+    if isinstance(request, TokenizeCardRequest):
+        token = await token_service.create_card_token(
+            db=db,
+            method=request.method,
+            card_number=request.card_number,
+            card_holder=request.card_holder,
+            expiry=request.expiry,
+            cvv=request.cvv,
+        )
+    elif isinstance(request, TokenizeWalletRequest):
+        token = await token_service.create_wallet_token(
+            db=db,
+            wallet_provider=request.wallet_provider,
+            wallet_email=request.wallet_email,
+        )
+    elif isinstance(request, TokenizeTransferRequest):
+        token = await token_service.create_transfer_token(
+            db=db,
+            bank_code=request.bank_code,
+            account_number=request.account_number,
+            account_holder=request.account_holder,
+        )
+    else:
+        raise InvalidTokenError("Unsupported payment method")
+
     return TokenizeResponse(
         token=token.token,
-        card_last4=token.card_last4,
-        card_brand=token.card_brand,
+        method=token.method,
+        display_label=token.display_label,
         expires_at=token.expires_at,
+        card_last4=token.method_data.get("last4"),
+        card_brand=token.method_data.get("brand"),
+        wallet_provider=token.method_data.get("provider"),
+        bank_code=token.method_data.get("bankCode"),
     )
 
 
@@ -54,8 +98,7 @@ async def initiate_payment(
         method=request.method,
         status="processing",
         token_id=token.id,
-        card_last4=token.card_last4,
-        card_brand=token.card_brand,
+        display_label=token.display_label,
         created_at=datetime.now(timezone.utc),
     )
     db.add(payment)
@@ -63,8 +106,9 @@ async def initiate_payment(
     await db.refresh(payment)
 
     # 3. Call payment adapter
+    card_hash = token.method_data.get("numberHash") if token.method_data else None
     gateway_result = await payment_adapter.process_payment(
-        card_number_hash=token.card_number_hash,
+        card_number_hash=card_hash,
         amount=request.amount,
     )
 
@@ -74,7 +118,6 @@ async def initiate_payment(
     if gateway_result.approved:
         payment.status = "approved"
 
-        # 4. Publish SQS event (fire-and-forget)
         try:
             await sqs_publisher.publish_payment_confirmed(
                 {
@@ -94,7 +137,6 @@ async def initiate_payment(
         payment.status = "declined"
         payment.error_code = gateway_result.error_code
 
-        # Publish decline event (fire-and-forget)
         try:
             await sqs_publisher.publish_payment_declined(
                 {
@@ -114,6 +156,9 @@ async def initiate_payment(
     await db.commit()
     await db.refresh(payment)
 
+    card_last4 = token.method_data.get("last4") if token.method_data else None
+    card_brand = token.method_data.get("brand") if token.method_data else None
+
     return PaymentResponse(
         payment_id=payment.id,
         status=payment.status,
@@ -122,8 +167,8 @@ async def initiate_payment(
         amount=float(payment.amount),
         currency=payment.currency,
         method=payment.method,
-        card_last4=payment.card_last4,
-        card_brand=payment.card_brand,
+        card_last4=card_last4,
+        card_brand=card_brand,
         transaction_id=payment.transaction_id,
         message=message,
         created_at=payment.created_at,
@@ -138,6 +183,12 @@ async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> PaymentRespons
     if not payment:
         raise PaymentNotFoundError(str(payment_id))
 
+    # Get token for display data
+    token_result = await db.execute(select(PaymentToken).where(PaymentToken.id == payment.token_id))
+    token = token_result.scalar_one_or_none()
+    card_last4 = token.method_data.get("last4") if token and token.method_data else None
+    card_brand = token.method_data.get("brand") if token and token.method_data else None
+
     return PaymentResponse(
         payment_id=payment.id,
         status=payment.status,
@@ -146,8 +197,8 @@ async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> PaymentRespons
         amount=float(payment.amount),
         currency=payment.currency,
         method=payment.method,
-        card_last4=payment.card_last4,
-        card_brand=payment.card_brand,
+        card_last4=card_last4,
+        card_brand=card_brand,
         transaction_id=payment.transaction_id,
         message=None,
         created_at=payment.created_at,

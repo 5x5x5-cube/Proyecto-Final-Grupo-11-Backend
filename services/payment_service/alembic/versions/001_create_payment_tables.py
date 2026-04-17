@@ -8,7 +8,7 @@ Create Date: 2026-04-16
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 
 from alembic import op
 
@@ -23,12 +23,9 @@ def upgrade() -> None:
         "payment_tokens",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("token", sa.String(64), unique=True, nullable=False),
-        sa.Column("card_last4", sa.String(4), nullable=False),
-        sa.Column("card_brand", sa.String(20), nullable=False),
-        sa.Column("card_holder", sa.String(200), nullable=False),
-        sa.Column("card_number_hash", sa.String(64), nullable=False),
-        sa.Column("expiry_month", sa.Integer, nullable=False),
-        sa.Column("expiry_year", sa.Integer, nullable=False),
+        sa.Column("method", sa.String(20), nullable=False),
+        sa.Column("display_label", sa.String(200), nullable=False),
+        sa.Column("method_data", JSON, nullable=False, server_default="{}"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -53,8 +50,7 @@ def upgrade() -> None:
             sa.ForeignKey("payment_tokens.id"),
             nullable=False,
         ),
-        sa.Column("card_last4", sa.String(4)),
-        sa.Column("card_brand", sa.String(20)),
+        sa.Column("display_label", sa.String(200)),
         sa.Column("transaction_id", sa.String(64), nullable=True),
         sa.Column("error_code", sa.String(50), nullable=True),
         sa.Column(

@@ -28,12 +28,16 @@ def _make_token(
     return PaymentToken(
         id=uuid.uuid4(),
         token="tok_test1234567890abcdef1234567890ab",
-        card_last4=card_number[-4:],
-        card_brand="visa",
-        card_holder="John Doe",
-        card_number_hash=hash_card_number(card_number),
-        expiry_month=12,
-        expiry_year=2030,
+        method="credit_card",
+        display_label=f"Visa •••• {card_number[-4:]}",
+        method_data={
+            "last4": card_number[-4:],
+            "brand": "visa",
+            "holder": "John Doe",
+            "numberHash": hash_card_number(card_number),
+            "expiryMonth": 12,
+            "expiryYear": 2030,
+        },
         created_at=now - timedelta(minutes=10 if not expired else 20),
         expires_at=now + timedelta(minutes=5) if not expired else now - timedelta(minutes=5),
     )
@@ -50,8 +54,7 @@ def _make_payment(token: PaymentToken, status: str = "approved") -> Payment:
         method="credit_card",
         status=status,
         token_id=token.id,
-        card_last4=token.card_last4,
-        card_brand=token.card_brand,
+        display_label=token.display_label,
         transaction_id="txn_abc123",
         error_code=None,
         created_at=datetime.now(timezone.utc),
@@ -92,6 +95,7 @@ class TestTokenizeEndpoint:
                 response = await client.post(
                     "/api/v1/payments/tokenize",
                     json={
+                        "method": "credit_card",
                         "cardNumber": "4242424242424242",
                         "cardHolder": "John Doe",
                         "expiry": "12/30",
@@ -118,6 +122,7 @@ class TestTokenizeEndpoint:
                 response = await client.post(
                     "/api/v1/payments/tokenize",
                     json={
+                        "method": "credit_card",
                         "cardNumber": "1234567890123456",
                         "cardHolder": "John Doe",
                         "expiry": "12/30",
@@ -136,6 +141,7 @@ class TestTokenizeEndpoint:
             response = await client.post(
                 "/api/v1/payments/tokenize",
                 json={
+                    "method": "credit_card",
                     "cardNumber": "4242424242424242",
                     "cardHolder": "John Doe",
                     "expiry": "12/30",
@@ -315,9 +321,12 @@ class TestGetPaymentEndpoint:
 
         db = AsyncMock()
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = payment
-        db.execute = AsyncMock(return_value=mock_result)
+        # First call returns Payment, second returns PaymentToken
+        payment_result = MagicMock()
+        payment_result.scalar_one_or_none.return_value = payment
+        token_result = MagicMock()
+        token_result.scalar_one_or_none.return_value = token
+        db.execute = AsyncMock(side_effect=[payment_result, token_result])
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
