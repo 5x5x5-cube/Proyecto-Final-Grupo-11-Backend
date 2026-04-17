@@ -15,8 +15,8 @@ from ..schemas import (
     TokenizeTransferRequest,
     TokenizeWalletRequest,
 )
-from . import booking_client, payment_adapter, token_service
-from .sqs_publisher import sqs_publisher
+from . import cart_client, payment_adapter, token_service
+from .notification_service import notify_payment_confirmed, notify_payment_declined
 
 
 def _parse_tokenize_request(body: dict) -> TokenizeRequest:
@@ -88,13 +88,18 @@ async def initiate_payment(
     if token.expires_at.replace(tzinfo=timezone.utc) < now:
         raise TokenExpiredError()
 
-    # 2. Create Payment record
+    # 2. Fetch cart data
+    cart = await cart_client.get_cart(cart_id=request.cart_id, user_id=user_id)
+
+    # 3. Create Payment record (no booking_id yet — created after approval)
+    total_price = float(cart.price_breakdown.total)
+    currency = cart.price_breakdown.currency
+
     payment = Payment(
         id=uuid.uuid4(),
-        booking_id=request.booking_id,
         user_id=user_id,
-        amount=request.amount,
-        currency=request.currency,
+        amount=total_price,
+        currency=currency,
         method=request.method,
         status="processing",
         token_id=token.id,
@@ -105,11 +110,11 @@ async def initiate_payment(
     await db.commit()
     await db.refresh(payment)
 
-    # 3. Call payment adapter
+    # 4. Call payment adapter
     card_hash = token.method_data.get("numberHash") if token.method_data else None
     gateway_result = await payment_adapter.process_payment(
         card_number_hash=card_hash,
-        amount=request.amount,
+        amount=total_price,
     )
 
     payment.transaction_id = gateway_result.transaction_id
@@ -118,38 +123,16 @@ async def initiate_payment(
     if gateway_result.approved:
         payment.status = "approved"
 
-        try:
-            await sqs_publisher.publish_payment_confirmed(
-                {
-                    "payment_id": str(payment.id),
-                    "booking_id": str(payment.booking_id),
-                    "user_id": str(user_id),
-                    "amount": float(payment.amount),
-                    "currency": payment.currency,
-                    "transaction_id": gateway_result.transaction_id,
-                }
-            )
-        except Exception:  # noqa: B110  # nosec B110
-            pass  # fire-and-forget: SQS failure must not block payment
+        # 5. Publish to SQS — a downstream consumer (PaymentConfirmation)
+        # will create the booking and notify the user
+        await notify_payment_confirmed(payment, user_id, gateway_result.transaction_id, cart)
 
         message = "Payment approved"
     else:
         payment.status = "declined"
         payment.error_code = gateway_result.error_code
 
-        try:
-            await sqs_publisher.publish_payment_declined(
-                {
-                    "payment_id": str(payment.id),
-                    "booking_id": str(payment.booking_id),
-                    "user_id": str(user_id),
-                    "amount": float(payment.amount),
-                    "currency": payment.currency,
-                    "error_code": gateway_result.error_code,
-                }
-            )
-        except Exception:  # noqa: B110  # nosec B110
-            pass  # fire-and-forget: SQS failure must not block payment
+        await notify_payment_declined(payment, user_id, gateway_result.error_code)
 
         message = "Payment declined"
 

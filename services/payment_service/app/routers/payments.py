@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
 from ..schemas import InitiatePaymentRequest, PaymentResponse, TokenizeResponse
+from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import get_payment as get_payment_svc
 from ..services.payment_service import initiate_payment, tokenize_method
 
@@ -53,6 +54,10 @@ async def initiate_payment_endpoint(
         raise HTTPException(status_code=400, detail=str(exc))
     except TokenExpiredError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except CartNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except CartExpiredError as exc:
+        raise HTTPException(status_code=410, detail=str(exc))
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

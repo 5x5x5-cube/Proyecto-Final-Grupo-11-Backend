@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/travelhub"
+    cart_service_url: str = "http://localhost:8004"
     booking_service_url: str = "http://localhost:8002"
     sqs_queue_url: str = ""
     aws_region: str = "us-east-1"

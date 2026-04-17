@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from app.database import get_db
 from app.main import app
 from app.models import Payment, PaymentToken
+from app.schemas import CartData
 from app.services.token_service import hash_card_number
 
 # ---------------------------------------------------------------------------
@@ -17,7 +18,31 @@ from app.services.token_service import hash_card_number
 # ---------------------------------------------------------------------------
 
 USER_ID = uuid.UUID("c1000000-0000-0000-0000-000000000001")
-BOOKING_ID = uuid.UUID("e1000000-0000-0000-0000-000000000001")
+CART_ID = uuid.UUID("d1000000-0000-0000-0000-000000000001")
+
+MOCK_CART = CartData.model_validate(
+    {
+        "id": str(CART_ID),
+        "userId": str(USER_ID),
+        "roomId": "b1000000-0000-0000-0000-000000000001",
+        "hotelId": "a1000000-0000-0000-0000-000000000001",
+        "holdId": "h1000000-0000-0000-0000-000000000001",
+        "checkIn": "2026-05-01",
+        "checkOut": "2026-05-04",
+        "guests": 2,
+        "hotelName": "Hotel Caribe Plaza",
+        "roomName": "Standard",
+        "priceBreakdown": {
+            "pricePerNight": "250000.00",
+            "nights": 3,
+            "subtotal": "750000.00",
+            "vat": "142500.00",
+            "serviceFee": "0",
+            "total": "892500.00",
+            "currency": "COP",
+        },
+    }
+)
 
 
 def _make_token(
@@ -46,7 +71,7 @@ def _make_token(
 def _make_payment(token: PaymentToken, status: str = "approved") -> Payment:
     return Payment(
         id=uuid.uuid4(),
-        booking_id=BOOKING_ID,
+        booking_id=None,
         booking_code=None,
         user_id=USER_ID,
         amount=500000.00,
@@ -157,8 +182,9 @@ class TestTokenizeEndpoint:
 
 
 class TestInitiateEndpoint:
-    @patch("app.services.payment_service.sqs_publisher")
-    async def test_initiate_approved(self, mock_sqs):
+    @patch("app.services.payment_service.notify_payment_confirmed", new_callable=AsyncMock)
+    @patch("app.services.payment_service.cart_client")
+    async def test_initiate_approved(self, mock_cart, mock_notify):
         token = _make_token("4242424242424242")
 
         db = AsyncMock()
@@ -175,7 +201,9 @@ class TestInitiateEndpoint:
                 obj.created_at = datetime.now(timezone.utc)
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
-        mock_sqs.publish_payment_confirmed = AsyncMock(return_value=True)
+
+        # Mock cart client
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -185,8 +213,7 @@ class TestInitiateEndpoint:
                     "/api/v1/payments/initiate",
                     json={
                         "token": token.token,
-                        "bookingId": str(BOOKING_ID),
-                        "amount": 500000.0,
+                        "cartId": str(CART_ID),
                         "currency": "COP",
                         "method": "credit_card",
                     },
@@ -202,8 +229,9 @@ class TestInitiateEndpoint:
         finally:
             app.dependency_overrides.clear()
 
-    @patch("app.services.payment_service.sqs_publisher")
-    async def test_initiate_declined(self, mock_sqs):
+    @patch("app.services.payment_service.notify_payment_declined", new_callable=AsyncMock)
+    @patch("app.services.payment_service.cart_client")
+    async def test_initiate_declined(self, mock_cart, mock_notify):
         token = _make_token("4000000000000002")
 
         db = AsyncMock()
@@ -217,7 +245,7 @@ class TestInitiateEndpoint:
                 obj.created_at = datetime.now(timezone.utc)
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
-        mock_sqs.publish_payment_declined = AsyncMock(return_value=True)
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -227,8 +255,7 @@ class TestInitiateEndpoint:
                     "/api/v1/payments/initiate",
                     json={
                         "token": token.token,
-                        "bookingId": str(BOOKING_ID),
-                        "amount": 500000.0,
+                        "cartId": str(CART_ID),
                     },
                     headers={"X-User-Id": str(USER_ID)},
                 )
@@ -257,8 +284,7 @@ class TestInitiateEndpoint:
                     "/api/v1/payments/initiate",
                     json={
                         "token": token.token,
-                        "bookingId": str(BOOKING_ID),
-                        "amount": 500000.0,
+                        "cartId": str(CART_ID),
                     },
                     headers={"X-User-Id": str(USER_ID)},
                 )
@@ -283,8 +309,7 @@ class TestInitiateEndpoint:
                     "/api/v1/payments/initiate",
                     json={
                         "token": "tok_invalid",
-                        "bookingId": str(BOOKING_ID),
-                        "amount": 500000.0,
+                        "cartId": str(CART_ID),
                     },
                     headers={"X-User-Id": str(USER_ID)},
                 )
@@ -301,8 +326,7 @@ class TestInitiateEndpoint:
                 "/api/v1/payments/initiate",
                 json={
                     "token": "tok_test",
-                    "bookingId": str(BOOKING_ID),
-                    "amount": 500000.0,
+                    "cartId": str(CART_ID),
                 },
             )
 

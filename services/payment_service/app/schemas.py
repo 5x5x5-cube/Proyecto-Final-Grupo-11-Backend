@@ -99,12 +99,69 @@ class TokenizeResponse(BaseModel):
 
 class InitiatePaymentRequest(BaseModel):
     token: str
-    booking_id: uuid.UUID = Field(..., alias="bookingId")
-    amount: float
-    currency: str = "COP"
+    cart_id: uuid.UUID = Field(..., alias="cartId")
     method: str = "credit_card"
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Cart data (mirrors cart_service response for inter-service communication) ──
+
+
+class CartPriceBreakdown(BaseModel):
+    price_per_night: str = Field(..., alias="pricePerNight")
+    nights: int
+    subtotal: str
+    vat: str
+    tourism_tax: str = Field("0", alias="tourismTax")
+    service_fee: str = Field("0", alias="serviceFee")
+    total: str
+    currency: str = "COP"
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class CartData(BaseModel):
+    id: str
+    user_id: str = Field(..., alias="userId")
+    room_id: str = Field(..., alias="roomId")
+    hotel_id: str = Field(..., alias="hotelId")
+    check_in: str = Field(..., alias="checkIn")
+    check_out: str = Field(..., alias="checkOut")
+    guests: int
+    hold_id: str = Field(..., alias="holdId")
+    hotel_name: str = Field("", alias="hotelName")
+    room_name: str = Field("", alias="roomName")
+    price_breakdown: CartPriceBreakdown = Field(..., alias="priceBreakdown")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── SQS Event Payloads ──
+
+
+class PaymentConfirmedEvent(BaseModel):
+    payment_id: str = Field(..., alias="paymentId")
+    user_id: str = Field(..., alias="userId")
+    amount: float
+    currency: str
+    transaction_id: str = Field(..., alias="transactionId")
+    cart: CartData
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentDeclinedEvent(BaseModel):
+    payment_id: str = Field(..., alias="paymentId")
+    user_id: str = Field(..., alias="userId")
+    amount: float
+    currency: str
+    error_code: str | None = Field(None, alias="errorCode")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Response ──
 
 
 class PaymentResponse(BaseModel):
