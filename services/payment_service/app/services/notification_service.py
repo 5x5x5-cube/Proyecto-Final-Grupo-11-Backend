@@ -1,9 +1,9 @@
-"""Publishes typed payment events to SQS for downstream consumers (notification service, etc.)."""
+"""Publishes typed payment events to SQS for downstream consumers."""
 
 import uuid
 
 from ..models import Payment
-from ..schemas import CartData, PaymentConfirmedEvent, PaymentDeclinedEvent
+from ..schemas import PaymentConfirmedEvent, PaymentDeclinedEvent
 from .sqs_publisher import sqs_publisher
 
 
@@ -11,16 +11,14 @@ async def notify_payment_confirmed(
     payment: Payment,
     user_id: uuid.UUID,
     transaction_id: str,
-    cart: CartData,
 ) -> None:
-    """Publish a payment_confirmed event with cart data for downstream booking creation."""
+    """Publish a payment_confirmed event. Fire-and-forget."""
     event = PaymentConfirmedEvent(
         payment_id=str(payment.id),
         user_id=str(user_id),
         amount=float(payment.amount),
         currency=payment.currency,
         transaction_id=transaction_id,
-        cart=cart,
     )
     try:
         await sqs_publisher.publish_payment_confirmed(event.model_dump(by_alias=True))

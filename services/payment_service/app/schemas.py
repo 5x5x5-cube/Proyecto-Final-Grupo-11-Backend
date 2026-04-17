@@ -94,6 +94,18 @@ class TokenizeResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
 
+# ── Webhook (gateway callback) ──
+
+
+class PaymentConfirmationWebhook(BaseModel):
+    payment_id: uuid.UUID = Field(..., alias="paymentId")
+    approved: bool
+    transaction_id: str = Field(..., alias="transactionId")
+    error_code: str | None = Field(None, alias="errorCode")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 # ── Initiate & Response ──
 
 
@@ -146,7 +158,6 @@ class PaymentConfirmedEvent(BaseModel):
     amount: float
     currency: str
     transaction_id: str = Field(..., alias="transactionId")
-    cart: CartData
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 

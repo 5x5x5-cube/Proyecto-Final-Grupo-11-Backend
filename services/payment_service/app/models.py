@@ -3,7 +3,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import DECIMAL, DateTime, Enum, ForeignKey, String
+from sqlalchemy import DECIMAL, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -32,10 +32,7 @@ class PaymentToken(Base):
     token: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, default=generate_token
     )
-    method: Mapped[str] = mapped_column(
-        Enum(PaymentMethod, name="payment_method_enum", create_constraint=False),
-        nullable=False,
-    )
+    method: Mapped[str] = mapped_column(String(20), nullable=False)
     display_label: Mapped[str] = mapped_column(String(200), nullable=False)
     method_data: Mapped[MethodData] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
@@ -56,10 +53,7 @@ class Payment(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     amount: Mapped[float] = mapped_column(DECIMAL(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="COP")
-    method: Mapped[str] = mapped_column(
-        Enum(PaymentMethod, name="payment_method_enum", create_constraint=False),
-        nullable=False,
-    )
+    method: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="processing")
     token_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("payment_tokens.id"), nullable=False

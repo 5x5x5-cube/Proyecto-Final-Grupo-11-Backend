@@ -182,14 +182,14 @@ class TestTokenizeEndpoint:
 
 
 class TestInitiateEndpoint:
-    @patch("app.services.payment_service.notify_payment_confirmed", new_callable=AsyncMock)
+    @patch("app.services.payment_service.payment_adapter")
     @patch("app.services.payment_service.cart_client")
-    async def test_initiate_approved(self, mock_cart, mock_notify):
+    async def test_initiate_returns_processing(self, mock_cart, mock_adapter):
+        """Initiate returns 202 with status=processing immediately."""
         token = _make_token("4242424242424242")
 
         db = AsyncMock()
 
-        # Mock the token lookup
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = token
         db.execute = AsyncMock(return_value=mock_result)
@@ -201,9 +201,9 @@ class TestInitiateEndpoint:
                 obj.created_at = datetime.now(timezone.utc)
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
-
-        # Mock cart client
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        # Adapter fires in background — mock it to not actually sleep/call webhook
+        mock_adapter.process_payment_async = AsyncMock()
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -214,7 +214,6 @@ class TestInitiateEndpoint:
                     json={
                         "token": token.token,
                         "cartId": str(CART_ID),
-                        "currency": "COP",
                         "method": "credit_card",
                     },
                     headers={"X-User-Id": str(USER_ID)},
@@ -222,16 +221,17 @@ class TestInitiateEndpoint:
 
             assert response.status_code == 202
             data = response.json()
-            assert data["status"] == "approved"
+            assert data["status"] == "processing"
             assert data["cardLast4"] == "4242"
-            assert data["transactionId"].startswith("txn_")
-            assert data["message"] == "Payment approved"
+            assert data["paymentId"] is not None
+            assert data["message"] is None  # no message while processing
         finally:
             app.dependency_overrides.clear()
 
-    @patch("app.services.payment_service.notify_payment_declined", new_callable=AsyncMock)
+    @patch("app.services.payment_service.payment_adapter")
     @patch("app.services.payment_service.cart_client")
-    async def test_initiate_declined(self, mock_cart, mock_notify):
+    async def test_initiate_decline_card_still_returns_processing(self, mock_cart, mock_adapter):
+        """Even a decline card returns processing initially — result comes via polling."""
         token = _make_token("4000000000000002")
 
         db = AsyncMock()
@@ -246,6 +246,7 @@ class TestInitiateEndpoint:
 
         db.refresh = AsyncMock(side_effect=fake_refresh)
         mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        mock_adapter.process_payment_async = AsyncMock()
 
         app.dependency_overrides[get_db] = _override_db(db)
         try:
@@ -262,8 +263,7 @@ class TestInitiateEndpoint:
 
             assert response.status_code == 202
             data = response.json()
-            assert data["status"] == "declined"
-            assert data["message"] == "Payment declined"
+            assert data["status"] == "processing"
         finally:
             app.dependency_overrides.clear()
 
@@ -379,6 +379,75 @@ class TestGetPaymentEndpoint:
                 response = await client.get(f"/api/v1/payments/{uuid.uuid4()}")
 
             assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Confirmation webhook
+# ---------------------------------------------------------------------------
+
+
+class TestConfirmationWebhook:
+    @patch("app.services.payment_service.notify_payment_confirmed", new_callable=AsyncMock)
+    async def test_webhook_approves_payment(self, mock_notify):
+        """Webhook updates payment from processing to approved."""
+        token = _make_token()
+        payment = _make_payment(token, status="processing")
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/confirmation",
+                    json={
+                        "paymentId": str(payment.id),
+                        "approved": True,
+                        "transactionId": "txn_test123",
+                        "errorCode": None,
+                    },
+                )
+
+            assert response.status_code == 200
+            assert payment.status == "approved"
+            assert payment.transaction_id == "txn_test123"
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.services.payment_service.notify_payment_declined", new_callable=AsyncMock)
+    async def test_webhook_declines_payment(self, mock_notify):
+        """Webhook updates payment from processing to declined."""
+        token = _make_token()
+        payment = _make_payment(token, status="processing")
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/confirmation",
+                    json={
+                        "paymentId": str(payment.id),
+                        "approved": False,
+                        "transactionId": "txn_test456",
+                        "errorCode": "insufficient_funds",
+                    },
+                )
+
+            assert response.status_code == 200
+            assert payment.status == "declined"
+            assert payment.error_code == "insufficient_funds"
         finally:
             app.dependency_overrides.clear()
 

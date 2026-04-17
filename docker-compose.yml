@@ -178,8 +178,11 @@ services:
       - "8009:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - CART_SERVICE_URL=http://cart-service:8000
+      - BOOKING_SERVICE_URL=http://booking-service:8000
     depends_on:
       - postgres
+      - cart-service
     networks:
       - microservices
 
