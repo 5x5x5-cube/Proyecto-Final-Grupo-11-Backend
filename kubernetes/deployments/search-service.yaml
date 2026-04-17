@@ -31,17 +31,23 @@ spec:
         - name: REDIS_URL
           valueFrom:
             configMapKeyRef:
-              name: search-service-config
+              name: shared-infra-config
               key: redis-url
         - name: SQS_QUEUE_URL
           valueFrom:
             configMapKeyRef:
-              name: search-service-config
+              name: shared-infra-config
               key: sqs-queue-url
         - name: AWS_REGION
-          value: "us-east-1"
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
         - name: AWS_ENDPOINT_URL
-          value: ""
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
         livenessProbe:
           httpGet:
             path: /health
@@ -74,4 +80,3 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
-

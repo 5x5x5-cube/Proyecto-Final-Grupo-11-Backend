@@ -6,6 +6,9 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 env:
   AWS_REGION: us-east-1
@@ -15,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       github.event.workflow_run.conclusion == 'success'
     outputs:
       services: ${{ steps.set-services.outputs.services }}
@@ -26,7 +30,7 @@ jobs:
       - name: Detect changed services
         id: set-services
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             SERVICES='["auth_service","search_service","cart_service","inventory_service","notification_service","health_copilot"]'
           else
             CHANGED=$(git diff --name-only HEAD^ HEAD | grep '^services/' | cut -d'/' -f2 | sort -u || true)
@@ -70,7 +74,14 @@ jobs:
           # service dir uses underscores (cart_service), k8s uses dashes (cart-service)
           SERVICE_NAME=$(echo "${{ matrix.service }}" | sed 's/_/-/g')
           echo "service-name=$SERVICE_NAME" >> $GITHUB_OUTPUT
-          echo "version=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          # Use the tag name as version when triggered by a tag push (e.g. v0.2.0),
+          # otherwise fall back to the short commit SHA.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${GITHUB_SHA::8}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image

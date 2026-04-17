@@ -28,10 +28,13 @@ spec:
         - name: REDIS_URL
           valueFrom:
             configMapKeyRef:
-              name: cart-service-config
+              name: shared-infra-config
               key: redis-url
         - name: INVENTORY_SERVICE_URL
-          value: "http://inventory-service:80"
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: inventory-service-url
         livenessProbe:
           httpGet:
             path: /health
@@ -64,4 +67,3 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
-

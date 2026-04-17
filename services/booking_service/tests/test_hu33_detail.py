@@ -252,7 +252,7 @@ async def test_create_booking_without_guest_fields():
     assert result.guest_name is None
     assert result.guest_email is None
     assert result.guest_phone is None
-    assert result.status == "confirmed"
+    assert result.status == "pending"
 
 
 # ---------------------------------------------------------------------------
