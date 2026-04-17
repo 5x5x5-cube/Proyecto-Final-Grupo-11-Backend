@@ -1,0 +1,367 @@
+"""Tests for payment endpoints using mocked DB."""
+
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.database import get_db
+from app.main import app
+from app.models import Payment, PaymentToken
+from app.services.token_service import hash_card_number
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+USER_ID = uuid.UUID("c1000000-0000-0000-0000-000000000001")
+BOOKING_ID = uuid.UUID("e1000000-0000-0000-0000-000000000001")
+
+
+def _make_token(
+    card_number: str = "4242424242424242",
+    expired: bool = False,
+) -> PaymentToken:
+    now = datetime.now(timezone.utc)
+    return PaymentToken(
+        id=uuid.uuid4(),
+        token="tok_test1234567890abcdef1234567890ab",
+        card_last4=card_number[-4:],
+        card_brand="visa",
+        card_holder="John Doe",
+        card_number_hash=hash_card_number(card_number),
+        expiry_month=12,
+        expiry_year=2030,
+        created_at=now - timedelta(minutes=10 if not expired else 20),
+        expires_at=now + timedelta(minutes=5) if not expired else now - timedelta(minutes=5),
+    )
+
+
+def _make_payment(token: PaymentToken, status: str = "approved") -> Payment:
+    return Payment(
+        id=uuid.uuid4(),
+        booking_id=BOOKING_ID,
+        booking_code=None,
+        user_id=USER_ID,
+        amount=500000.00,
+        currency="COP",
+        method="credit_card",
+        status=status,
+        token_id=token.id,
+        card_last4=token.card_last4,
+        card_brand=token.card_brand,
+        transaction_id="txn_abc123",
+        error_code=None,
+        created_at=datetime.now(timezone.utc),
+        processed_at=datetime.now(timezone.utc),
+    )
+
+
+def _override_db(db_mock):
+    """Create a dependency override that returns the mock session."""
+
+    async def _get_db_override():
+        yield db_mock
+
+    return _get_db_override
+
+
+# ---------------------------------------------------------------------------
+# Tokenize endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestTokenizeEndpoint:
+    async def test_tokenize_valid_card(self):
+        db = AsyncMock()
+
+        async def fake_refresh(obj):
+            if obj.created_at is None:
+                obj.created_at = datetime.now(timezone.utc)
+            if obj.expires_at is None:
+                obj.expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+        db.refresh = AsyncMock(side_effect=fake_refresh)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/tokenize",
+                    json={
+                        "cardNumber": "4242424242424242",
+                        "cardHolder": "John Doe",
+                        "expiry": "12/30",
+                        "cvv": "123",
+                    },
+                )
+
+            assert response.status_code == 201
+            data = response.json()
+            assert data["token"].startswith("tok_")
+            assert data["cardLast4"] == "4242"
+            assert data["cardBrand"] == "visa"
+            assert "expiresAt" in data
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_tokenize_invalid_luhn(self):
+        db = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/tokenize",
+                    json={
+                        "cardNumber": "1234567890123456",
+                        "cardHolder": "John Doe",
+                        "expiry": "12/30",
+                        "cvv": "123",
+                    },
+                )
+
+            assert response.status_code == 400
+            assert "Invalid card number" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_tokenize_missing_cvv(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/payments/tokenize",
+                json={
+                    "cardNumber": "4242424242424242",
+                    "cardHolder": "John Doe",
+                    "expiry": "12/30",
+                },
+            )
+
+        assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Initiate endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestInitiateEndpoint:
+    @patch("app.services.payment_service.sqs_publisher")
+    async def test_initiate_approved(self, mock_sqs):
+        token = _make_token("4242424242424242")
+
+        db = AsyncMock()
+
+        # Mock the token lookup
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = token
+        db.execute = AsyncMock(return_value=mock_result)
+
+        async def fake_refresh(obj):
+            if hasattr(obj, "status") and obj.id is None:
+                obj.id = uuid.uuid4()
+            if hasattr(obj, "created_at") and obj.created_at is None:
+                obj.created_at = datetime.now(timezone.utc)
+
+        db.refresh = AsyncMock(side_effect=fake_refresh)
+        mock_sqs.publish_payment_confirmed = AsyncMock(return_value=True)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={
+                        "token": token.token,
+                        "bookingId": str(BOOKING_ID),
+                        "amount": 500000.0,
+                        "currency": "COP",
+                        "method": "credit_card",
+                    },
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "approved"
+            assert data["cardLast4"] == "4242"
+            assert data["transactionId"].startswith("txn_")
+            assert data["message"] == "Payment approved"
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.services.payment_service.sqs_publisher")
+    async def test_initiate_declined(self, mock_sqs):
+        token = _make_token("4000000000000002")
+
+        db = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = token
+        db.execute = AsyncMock(return_value=mock_result)
+
+        async def fake_refresh(obj):
+            if hasattr(obj, "created_at") and obj.created_at is None:
+                obj.created_at = datetime.now(timezone.utc)
+
+        db.refresh = AsyncMock(side_effect=fake_refresh)
+        mock_sqs.publish_payment_declined = AsyncMock(return_value=True)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={
+                        "token": token.token,
+                        "bookingId": str(BOOKING_ID),
+                        "amount": 500000.0,
+                    },
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "declined"
+            assert data["message"] == "Payment declined"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_initiate_expired_token(self):
+        token = _make_token(expired=True)
+
+        db = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = token
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={
+                        "token": token.token,
+                        "bookingId": str(BOOKING_ID),
+                        "amount": 500000.0,
+                    },
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 400
+            assert "expired" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_initiate_invalid_token(self):
+        db = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={
+                        "token": "tok_invalid",
+                        "bookingId": str(BOOKING_ID),
+                        "amount": 500000.0,
+                    },
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 400
+            assert "not found" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_initiate_missing_user_id(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/payments/initiate",
+                json={
+                    "token": "tok_test",
+                    "bookingId": str(BOOKING_ID),
+                    "amount": 500000.0,
+                },
+            )
+
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Get payment endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestGetPaymentEndpoint:
+    async def test_get_payment_found(self):
+        token = _make_token()
+        payment = _make_payment(token)
+
+        db = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(f"/api/v1/payments/{payment.id}")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["paymentId"] == str(payment.id)
+            assert data["status"] == "approved"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_get_payment_not_found(self):
+        db = AsyncMock()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=mock_result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(f"/api/v1/payments/{uuid.uuid4()}")
+
+            assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Model security
+# ---------------------------------------------------------------------------
+
+
+class TestModelSecurity:
+    def test_payment_token_has_no_cvv_field(self):
+        """Verify the PaymentToken model has no CVV field."""
+        columns = [c.name for c in PaymentToken.__table__.columns]
+        assert "cvv" not in columns
+
+    def test_payment_has_no_cvv_field(self):
+        """Verify the Payment model has no CVV field."""
+        columns = [c.name for c in Payment.__table__.columns]
+        assert "cvv" not in columns
