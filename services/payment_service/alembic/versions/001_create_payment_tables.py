@@ -62,8 +62,6 @@ def upgrade() -> None:
         sa.Column("status", sa.String(20), server_default="processing"),
         sa.Column("transaction_id", sa.String(64), nullable=True),
         sa.Column("error_code", sa.String(50), nullable=True),
-        sa.Column("booking_id", UUID(as_uuid=True), nullable=True),
-        sa.Column("booking_code", sa.String(20), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=True),
     )

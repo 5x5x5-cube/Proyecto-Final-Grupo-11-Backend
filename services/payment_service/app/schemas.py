@@ -227,8 +227,6 @@ class PaymentResponse(BaseModel):
     amount: float
     currency: str
     transaction_id: str | None = Field(None, alias="transactionId")
-    booking_id: uuid.UUID | None = Field(None, alias="bookingId")
-    booking_code: str | None = Field(None, alias="bookingCode")
     message: str | None = None
     created_at: datetime = Field(..., alias="createdAt")
     processed_at: datetime | None = Field(None, alias="processedAt")

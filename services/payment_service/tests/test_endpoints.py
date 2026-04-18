@@ -91,8 +91,6 @@ def _make_payment(pm: UserPaymentMethod, status: str = "approved") -> Payment:
         status=status,
         transaction_id="txn_abc123",
         error_code=None,
-        booking_id=None,
-        booking_code=None,
         created_at=datetime.now(timezone.utc),
         processed_at=datetime.now(timezone.utc),
     )

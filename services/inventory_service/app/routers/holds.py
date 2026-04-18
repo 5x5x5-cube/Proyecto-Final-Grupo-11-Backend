@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -82,6 +82,37 @@ async def get_hold_endpoint(
         "status": hold.status,
         "expires_at": hold.expires_at,
         "ttl_seconds": data["ttl"],
+    }
+
+
+@router.put("/{hold_id}/confirm")
+async def confirm_hold_endpoint(
+    hold_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Hold).where(Hold.id == hold_id))
+    hold = result.scalar_one_or_none()
+    if not hold:
+        raise HTTPException(status_code=404, detail="Hold not found")
+
+    if hold.status == "confirmed":
+        return {
+            "id": hold.id,
+            "status": hold.status,
+            "expires_at": hold.expires_at,
+            "message": "Hold already confirmed",
+        }
+
+    hold.status = "confirmed"
+    hold.expires_at = datetime.now(timezone.utc) + timedelta(days=365 * 100)
+    await db.commit()
+    await db.refresh(hold)
+
+    return {
+        "id": hold.id,
+        "status": hold.status,
+        "expires_at": hold.expires_at,
+        "message": "Hold confirmed successfully",
     }
 
 
