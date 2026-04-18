@@ -14,7 +14,6 @@ from app.schemas import CreateBookingRequest
 from app.services.booking_service import create_booking
 
 logger = logging.getLogger(__name__)
-
 settings = get_settings()
 
 
