@@ -55,6 +55,8 @@ def upgrade() -> None:
             sa.ForeignKey("user_payment_methods.id"),
             nullable=False,
         ),
+        sa.Column("cart_id", UUID(as_uuid=True), nullable=True),
+        sa.Column("booking_snapshot", JSON, nullable=True),
         sa.Column("amount", sa.DECIMAL(12, 2), nullable=False),
         sa.Column("currency", sa.String(3), server_default="COP"),
         sa.Column("status", sa.String(20), server_default="processing"),

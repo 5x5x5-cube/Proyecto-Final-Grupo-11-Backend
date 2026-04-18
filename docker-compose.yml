@@ -56,6 +56,26 @@ services:
     networks:
       - microservices
 
+  booking-worker:
+    build:
+      context: ./services/booking_service
+      dockerfile: Dockerfile
+    entrypoint: []
+    command: ["python", "-u", "workers/sqs_worker.py"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/payment-booking-queue
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      - postgres
+      - localstack
+    networks:
+      - microservices
+
   search-service:
     build:
       context: ./services/search_service
@@ -133,7 +153,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
       - REDIS_URL=redis://redis:6379/0
       - AWS_ENDPOINT_URL=http://localstack:4566
-      - SQS_QUEUE_URL=http://localstack:4566/000000000000/hotel-sync-queue
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:command-update
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
@@ -180,9 +200,15 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
       - CART_SERVICE_URL=http://cart-service:8000
       - BOOKING_SERVICE_URL=http://booking-service:8000
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:command-update
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
     depends_on:
       - postgres
       - cart-service
+      - localstack
     networks:
       - microservices
 
@@ -223,7 +249,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=sqs
+      - SERVICES=sqs,sns
       - DEBUG=1
       - DATA_DIR=/tmp/localstack/data
     volumes:

@@ -79,6 +79,8 @@ class Payment(Base):
     payment_method_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_payment_methods.id"), nullable=False
     )
+    cart_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    booking_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     amount: Mapped[float] = mapped_column(DECIMAL(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="COP")
     status: Mapped[str] = mapped_column(String(20), default="processing")

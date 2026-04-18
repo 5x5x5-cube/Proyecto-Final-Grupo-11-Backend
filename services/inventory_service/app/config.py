@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     aws_region: str = "us-east-1"
     aws_endpoint_url: str = "http://localhost:4566"
-    sqs_queue_url: str = "http://localhost:4566/000000000000/hotel-sync-queue"
+    sns_topic_arn: str = "arn:aws:sns:us-east-1:000000000000:command-update"
     aws_access_key_id: str = "test"
     aws_secret_access_key: str = "test"
 

@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from ..config import settings
 
 
-class SQSPublisher:
+class SNSPublisher:
     def __init__(self):
         client_kwargs = {
             "region_name": settings.aws_region,
@@ -18,8 +18,8 @@ class SQSPublisher:
         }
         if settings.aws_endpoint_url:
             client_kwargs["endpoint_url"] = settings.aws_endpoint_url
-        self.client = boto3.client("sqs", **client_kwargs)
-        self.queue_url = settings.sqs_queue_url
+        self.client = boto3.client("sns", **client_kwargs)
+        self.topic_arn = settings.sns_topic_arn
 
     async def publish_event(
         self,
@@ -42,20 +42,20 @@ class SQSPublisher:
                 },
             }
 
-            response = self.client.send_message(
-                QueueUrl=self.queue_url,
-                MessageBody=json.dumps(event, default=str),
+            response = self.client.publish(
+                TopicArn=self.topic_arn,
+                Message=json.dumps(event, default=str),
                 MessageAttributes={
                     "event_type": {"StringValue": event_type, "DataType": "String"},
                     "entity_type": {"StringValue": entity_type, "DataType": "String"},
                 },
             )
 
-            print(f"Event published to SQS: {event_type} - MessageId: {response['MessageId']}")
+            print(f"Event published to SNS: {event_type} - MessageId: {response['MessageId']}")
             return True
 
         except ClientError as e:
-            print(f"Error publishing to SQS: {e}")
+            print(f"Error publishing to SNS: {e}")
             return False
         except Exception as e:
             print(f"Unexpected error: {e}")
@@ -90,4 +90,4 @@ class SQSPublisher:
         return await self.publish_event("updated", "availability", availability_data)
 
 
-sqs_publisher = SQSPublisher()
+sns_publisher = SNSPublisher()

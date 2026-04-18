@@ -19,7 +19,7 @@ terraform init
 terraform apply
 ```
 
-This creates: VPC, EKS cluster, RDS (PostgreSQL), ElastiCache (Redis), SQS queue, ECR repos, IAM roles.
+This creates: VPC, EKS cluster, RDS (PostgreSQL), ElastiCache (Redis), SNS topic (CommandUpdate EventBus), SQS queues (hotel-sync, payment-booking, notification), ECR repos, IAM roles.
 
 ### 2. Configure kubectl
 
@@ -188,7 +188,7 @@ kubectl config delete-context arn:aws:eks:us-east-1:618246140762:cluster/proyect
 | RDS | db.t3.micro | $15 |
 | ElastiCache | cache.t3.micro | $13 |
 | ECR | 10 repos | ~$1 |
-| SQS | 1 queue | ~$0 |
+| SNS + SQS | 1 topic, 3 queues | ~$0 |
 | CloudFront + S3 | Frontend | ~$1 |
 | **Total** | | **~$150/month (~$5/day)** |
 
