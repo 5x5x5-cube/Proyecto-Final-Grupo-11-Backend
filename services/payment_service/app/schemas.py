@@ -169,12 +169,30 @@ class CartData(BaseModel):
 # ── SQS Event Payloads ──
 
 
+class BookingData(BaseModel):
+    """Data needed by the downstream consumer to create a booking."""
+
+    room_id: str = Field(..., alias="roomId")
+    hotel_id: str = Field(..., alias="hotelId")
+    hold_id: str = Field(..., alias="holdId")
+    check_in: str = Field(..., alias="checkIn")
+    check_out: str = Field(..., alias="checkOut")
+    guests: int
+    base_price: str = Field(..., alias="basePrice")
+    tax_amount: str = Field(..., alias="taxAmount")
+    service_fee: str = Field("0", alias="serviceFee")
+    total_price: str = Field(..., alias="totalPrice")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 class PaymentConfirmedEvent(BaseModel):
     payment_id: str = Field(..., alias="paymentId")
     user_id: str = Field(..., alias="userId")
     amount: float
     currency: str
     transaction_id: str = Field(..., alias="transactionId")
+    booking_data: BookingData = Field(..., alias="bookingData")
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 

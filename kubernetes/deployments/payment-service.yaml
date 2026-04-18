@@ -40,11 +40,11 @@ spec:
             configMapKeyRef:
               name: shared-service-discovery
               key: payment-service-url
-        - name: SQS_QUEUE_URL
+        - name: SNS_TOPIC_ARN
           valueFrom:
             configMapKeyRef:
               name: shared-infra-config
-              key: sqs-queue-url
+              key: sns-topic-arn
         - name: AWS_REGION
           valueFrom:
             configMapKeyRef:

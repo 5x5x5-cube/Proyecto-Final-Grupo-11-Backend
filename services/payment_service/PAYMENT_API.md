@@ -262,11 +262,15 @@ Client → POST /initiate → 202 (processing)
          ↓
          POST /{id}/confirmation (internal webhook)
          ↓
-         Update status → Publish SQS event
-         ↓
-Client → GET /{id} → approved / declined
+         Update status → Publish to SNS (CommandUpdate EventBus)
+         ↓                    ↓
+Client → GET /{id}      SNS fans out to:
+         → approved       ├── payment-booking-queue → Booking Worker → creates pending booking
+                          └── notification-queue    → (future) Notification Worker
 ```
 
 - The **Payment Adapter** is a simulated external gateway that processes asynchronously and calls back the payment service via an internal webhook (`POST /payments/{id}/confirmation`).
-- On approval, the payment service publishes a `payment_confirmed` event to SQS. A downstream consumer (PaymentConfirmation) picks up the event and creates the booking via the booking service.
+- On approval, the payment service publishes a `payment_confirmed` event to the **SNS CommandUpdate topic** (central EventBus). SNS fans out to SQS queues:
+  - `payment-booking-queue` → **Booking Worker** consumes the event and creates a pending booking
+  - `notification-queue` → future notification consumer
 - The payment service does **not** create bookings directly. This is why `bookingId`/`bookingCode` are null in the payment response.
