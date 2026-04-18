@@ -9,6 +9,7 @@ services:
       - "8090:8000"
     environment:
       - BOOKING_SERVICE_URL=http://booking-service:8000
+      - INVENTORY_SERVICE_URL=http://inventory-service:8000
       - CART_SERVICE_URL=http://cart-service:8000
       - SEARCH_SERVICE_URL=http://search-service:8000
       - DEFAULT_USER_ID=c1000000-0000-0000-0000-000000000001
@@ -21,6 +22,7 @@ services:
       # - MONITOR_SERVICE_URL=http://health-copilot:8000
     depends_on:
       - booking-service
+      - inventory-service
       - cart-service
       - search-service
     networks:
