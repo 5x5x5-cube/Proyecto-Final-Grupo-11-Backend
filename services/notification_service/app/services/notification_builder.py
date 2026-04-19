@@ -14,7 +14,6 @@ def build_booking_notification(booking_data: Dict[str, Any], status: str) -> Dic
     """
     hotel_name = booking_data.get("hotel_name", "Hotel")
     check_in = booking_data.get("check_in", "")
-    check_out = booking_data.get("check_out", "")
 
     # Format dates if available
     check_in_formatted = check_in[:10] if check_in else ""  # YYYY-MM-DD
