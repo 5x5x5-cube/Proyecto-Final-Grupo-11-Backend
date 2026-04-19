@@ -13,10 +13,8 @@ from .tasks.cleanup import cleanup_expired_holds_loop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: launch background cleanup task
     cleanup_task = asyncio.create_task(cleanup_expired_holds_loop())
     yield
-    # Shutdown: cancel cleanup and close Redis
     cleanup_task.cancel()
     try:
         await cleanup_task
