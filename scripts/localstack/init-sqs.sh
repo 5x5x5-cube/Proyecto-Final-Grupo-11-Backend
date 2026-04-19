@@ -34,7 +34,7 @@ TOPIC_ARN="arn:aws:sns:us-east-1:000000000000:command-update"
 
 awslocal sns subscribe --topic-arn $TOPIC_ARN --protocol sqs \
   --notification-endpoint arn:aws:sqs:us-east-1:000000000000:hotel-sync-queue \
-  --attributes '{"FilterPolicy":"{\"entity_type\":[\"hotel\",\"room\",\"availability\"]}","RawMessageDelivery":"true"}'
+  --attributes '{"FilterPolicy":"{\"entity_type\":[\"hotel\",\"room\",\"availability\",\"tariff\"]}","RawMessageDelivery":"true"}'
 
 awslocal sns subscribe --topic-arn $TOPIC_ARN --protocol sqs \
   --notification-endpoint arn:aws:sqs:us-east-1:000000000000:payment-booking-queue \
