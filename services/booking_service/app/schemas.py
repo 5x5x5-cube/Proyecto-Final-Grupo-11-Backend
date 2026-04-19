@@ -93,6 +93,14 @@ class UpdateBookingStatusRequest(BaseModel):
     action: str = Field(..., pattern="^(confirm|reject)$")
 
 
+class QRCodeResponse(BaseModel):
+    qr_code: str = Field(..., alias="qrCode")
+    booking_id: uuid.UUID = Field(..., alias="bookingId")
+    guest_name: str = Field(..., alias="guestName")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ErrorResponse(BaseModel):
     code: str
     message: str
