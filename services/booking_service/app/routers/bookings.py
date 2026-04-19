@@ -1,13 +1,16 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..database import get_db
 from ..exceptions import BookingNotFoundError
 from ..models import Booking
-from ..schemas import BookingListResponse, BookingResponse, CreateBookingRequest
+from ..schemas import BookingListResponse, BookingResponse, CreateBookingRequest, QRCodeResponse
 from ..services.booking_service import create_booking
 
 router = APIRouter(prefix="/api/v1/bookings", tags=["bookings"])
@@ -116,4 +119,68 @@ async def get_booking_detail(
         priceBreakdown=None,
         holdExpiresAt=None,
         createdAt=booking.created_at,
+    )
+
+
+@router.get("/{booking_id}/qr", response_model=QRCodeResponse)
+async def get_booking_qr(
+    booking_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate a QR code token for a confirmed booking.
+
+    The QR code contains a signed JWT with booking information that can be
+    presented at hotel reception for check-in.
+
+    Requirements:
+    - Booking must belong to the authenticated user
+    - Booking must be in 'confirmed' status
+    - Check-in date must be within ±3 days from today
+    """
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.user_id != user_id:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this booking"
+        )
+
+    if booking.status != "confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"QR code can only be generated for confirmed bookings. Current status: {booking.status}",
+        )
+
+    # Verify check-in date is within valid range (±3 days)
+    today = datetime.now(timezone.utc).date()
+    days_until_checkin = (booking.check_in - today).days
+
+    if days_until_checkin < -3 or days_until_checkin > 3:
+        raise HTTPException(
+            status_code=400,
+            detail="QR code can only be generated within 3 days before or after check-in date",
+        )
+
+    # Generate JWT token
+    expiration = datetime.now(timezone.utc) + timedelta(days=settings.jwt_qr_expiration_days)
+    payload = {
+        "booking_id": str(booking.id),
+        "user_id": str(booking.user_id),
+        "guest_name": booking.guest_name or "Guest",
+        "hotel_id": str(booking.hotel_id),
+        "check_in": booking.check_in.isoformat(),
+        "check_out": booking.check_out.isoformat(),
+        "exp": expiration,
+        "iat": datetime.now(timezone.utc),
+    }
+
+    qr_token = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+    return QRCodeResponse(
+        qrCode=qr_token, bookingId=booking.id, guestName=booking.guest_name or "Guest"
     )

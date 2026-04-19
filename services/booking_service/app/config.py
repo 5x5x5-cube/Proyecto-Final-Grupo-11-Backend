@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     inventory_service_url: str = "http://localhost:8006"
     cart_service_url: str = "http://localhost:8004"
 
+    jwt_secret_key: str = "dev-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_qr_expiration_days: int = 7
+
     model_config = SettingsConfigDict(env_file=".env")
 
 
