@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from ..database import get_db
 from ..models import Hotel, Room, Tariff
 from ..schemas import AdminRoomResponse, TariffCreate, TariffResponse, TariffUpdate
-from ..services.sqs_publisher import sqs_publisher
+from ..services.sns_publisher import sns_publisher as sqs_publisher
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
 
