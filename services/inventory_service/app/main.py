@@ -7,16 +7,14 @@ from fastapi.responses import JSONResponse
 
 from .exceptions import HoldNotFoundError, RoomHeldError, RoomNotFoundError, RoomUnavailableError
 from .redis_client import close_redis
-from .routers import holds, hotels, rooms
+from .routers import holds, hotels, rooms, tariffs
 from .tasks.cleanup import cleanup_expired_holds_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: launch background cleanup task
     cleanup_task = asyncio.create_task(cleanup_expired_holds_loop())
     yield
-    # Shutdown: cancel cleanup and close Redis
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -43,6 +41,7 @@ app.add_middleware(
 app.include_router(hotels.router)
 app.include_router(rooms.router)
 app.include_router(holds.router)
+app.include_router(tariffs.router)
 
 
 # --- Exception handlers ---
