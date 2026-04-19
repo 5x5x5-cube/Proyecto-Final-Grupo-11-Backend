@@ -1,7 +1,9 @@
 import json
+import logging
 import uuid
 
 import boto3
+import httpx
 from botocore.exceptions import ClientError
 from sqlalchemy import select
 
@@ -11,6 +13,7 @@ from app.models import Booking
 from app.schemas import CreateBookingRequest
 from app.services.booking_service import create_booking
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -39,9 +42,10 @@ class SQSConsumer:
             payment = data.get("payment", {})
             user_id_str = payment.get("userId")
             booking_data = payment.get("bookingData", {})
+            payment_id_str = payment.get("paymentId")
 
             if not user_id_str or not booking_data:
-                print("Missing userId or bookingData in payment_confirmed event")
+                logger.warning("Missing userId or bookingData in payment_confirmed event")
                 return False
 
             hold_id = booking_data.get("holdId")
@@ -54,13 +58,14 @@ class SQSConsumer:
                     )
                     existing = result.scalar_one_or_none()
                     if existing:
-                        print(f"Booking already exists for holdId={hold_id}, skipping")
+                        logger.info("Booking already exists for holdId=%s, skipping", hold_id)
                         return True
 
                 request = CreateBookingRequest(
                     roomId=booking_data.get("roomId"),
                     hotelId=booking_data.get("hotelId"),
                     holdId=hold_id,
+                    paymentId=payment_id_str,
                     checkIn=booking_data.get("checkIn"),
                     checkOut=booking_data.get("checkOut"),
                     guests=booking_data.get("guests"),
@@ -75,8 +80,33 @@ class SQSConsumer:
                     user_id=uuid.UUID(user_id_str),
                     request=request,
                 )
-                print(f"Booking created for userId={user_id_str}, holdId={hold_id}")
-                return True
+                logger.info("Booking created for userId=%s, holdId=%s", user_id_str, hold_id)
+
+            # Post-payment: confirm hold in inventory (best-effort)
+            if hold_id:
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        resp = await client.put(
+                            f"{settings.inventory_service_url}/holds/{hold_id}/confirm"
+                        )
+                        resp.raise_for_status()
+                        logger.info("Hold %s confirmed in inventory", hold_id)
+                except Exception as e:
+                    logger.warning("Failed to confirm hold %s: %s", hold_id, e)
+
+            # Post-payment: mark cart as completed (best-effort)
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.patch(
+                        f"{settings.cart_service_url}/api/v1/cart/complete",
+                        headers={"X-User-Id": user_id_str},
+                    )
+                    resp.raise_for_status()
+                    logger.info("Cart completed for userId=%s", user_id_str)
+            except Exception as e:
+                logger.warning("Failed to complete cart for userId=%s: %s", user_id_str, e)
+
+            return True
 
         except json.JSONDecodeError as e:
             print(f"Error decoding message: {e}")

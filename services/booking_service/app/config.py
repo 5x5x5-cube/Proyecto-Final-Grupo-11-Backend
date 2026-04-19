@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     sqs_max_messages: int = 10
     sqs_visibility_timeout: int = 300
 
+    inventory_service_url: str = "http://localhost:8006"
+    cart_service_url: str = "http://localhost:8004"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 

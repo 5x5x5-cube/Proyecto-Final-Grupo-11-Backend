@@ -9,6 +9,7 @@ class CreateBookingRequest(BaseModel):
     room_id: uuid.UUID = Field(..., alias="roomId")
     hotel_id: uuid.UUID = Field(..., alias="hotelId")
     hold_id: uuid.UUID = Field(..., alias="holdId")
+    payment_id: uuid.UUID | None = Field(None, alias="paymentId")
     check_in: date = Field(..., alias="checkIn")
     check_out: date = Field(..., alias="checkOut")
     guests: int = Field(..., ge=1, le=10)
@@ -50,6 +51,7 @@ class BookingResponse(BaseModel):
     hotel_id: uuid.UUID = Field(..., alias="hotelId")
     room_id: uuid.UUID = Field(..., alias="roomId")
     hold_id: uuid.UUID | None = Field(None, alias="holdId")
+    payment_id: uuid.UUID | None = Field(None, alias="paymentId")
     check_in: date = Field(..., alias="checkIn")
     check_out: date = Field(..., alias="checkOut")
     guests: int

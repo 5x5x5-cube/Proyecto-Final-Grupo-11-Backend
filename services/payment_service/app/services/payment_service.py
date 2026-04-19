@@ -37,8 +37,6 @@ def _build_payment_response(
         amount=float(payment.amount),
         currency=payment.currency,
         transaction_id=payment.transaction_id,
-        booking_id=payment.booking_id,
-        booking_code=payment.booking_code,
         message=message,
         created_at=payment.created_at,
         processed_at=payment.processed_at,
