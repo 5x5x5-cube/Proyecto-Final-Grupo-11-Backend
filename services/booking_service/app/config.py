@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     inventory_service_url: str = "http://localhost:8006"
     cart_service_url: str = "http://localhost:8004"
+    auth_service_url: str = ""
 
     jwt_secret_key: str = "dev-secret-key-change-in-production"
     jwt_algorithm: str = "HS256"

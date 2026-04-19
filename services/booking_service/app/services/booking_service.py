@@ -1,5 +1,6 @@
 """Core booking business logic."""
 
+import logging
 import uuid
 from datetime import date, datetime
 
@@ -20,6 +21,8 @@ from ..schemas import (
     UpdateBookingStatusRequest,
 )
 from .sns_publisher import sns_publisher
+
+logger = logging.getLogger(__name__)
 
 # Descripciones de eventos para el timeline según el estado de la reserva
 _TIMELINE_DESCRIPTIONS: dict[str, str] = {
@@ -130,6 +133,34 @@ async def create_booking(
     return build_booking_response(booking)
 
 
+async def _fetch_user_names(user_ids: set[uuid.UUID]) -> dict[str, dict]:
+    """Batch-fetch user profiles from auth service. Returns {user_id_str: {name, email}}."""
+    if not settings.auth_service_url or not user_ids:
+        return {}
+    result: dict[str, dict] = {}
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            for uid in user_ids:
+                resp = await client.get(f"{settings.auth_service_url}/api/v1/auth/users/{uid}")
+                if resp.status_code == 200:
+                    result[str(uid)] = resp.json()
+    except Exception as e:  # nosec B110
+        logger.warning("Failed to fetch user names from auth: %s", e)
+    return result
+
+
+def _enrich_responses(
+    responses: list[BookingResponse], user_map: dict[str, dict]
+) -> list[BookingResponse]:
+    """Enrich booking responses with guest names from auth service data."""
+    for r in responses:
+        user_data = user_map.get(str(r.user_id))
+        if user_data and not r.guest_name:
+            r.guest_name = user_data.get("name")
+            r.guest_email = user_data.get("email")
+    return responses
+
+
 async def list_hotel_bookings(
     db: AsyncSession,
     hotel_id: uuid.UUID,
@@ -177,8 +208,15 @@ async def list_hotel_bookings(
     result = await db.execute(paged_query)
     bookings = result.scalars().all()
 
+    responses = [build_booking_response(b) for b in bookings]
+
+    # Enrich with guest names from auth service
+    user_ids = {b.user_id for b in bookings}
+    user_map = await _fetch_user_names(user_ids)
+    _enrich_responses(responses, user_map)
+
     return HotelBookingListResponse(
-        data=[build_booking_response(b) for b in bookings],
+        data=responses,
         total=total,
         page=page,
         limit=limit,
@@ -210,7 +248,13 @@ async def get_hotel_booking(
         totalPrice=float(booking.total_price),
         currency=booking.currency,
     )
-    return build_booking_response(booking, price_breakdown=price_breakdown)
+    response = build_booking_response(booking, price_breakdown=price_breakdown)
+
+    # Enrich with guest name from auth service
+    user_map = await _fetch_user_names({booking.user_id})
+    _enrich_responses([response], user_map)
+
+    return response
 
 
 async def update_booking_status(
