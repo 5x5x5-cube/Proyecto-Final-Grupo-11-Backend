@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import Hotel
 from ..schemas.hotel import HotelCreate, HotelResponse
-from ..services.sqs_publisher import sqs_publisher
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/hotels", tags=["hotels"])
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/hotels", tags=["hotels"])
 async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Depends(get_db)):
     """
     Webhook endpoint to register a new hotel from external sources.
-    Publishes event to SQS for synchronization with search service.
+    Publishes event to SNS for synchronization with search service.
     """
     existing = await db.execute(select(Hotel).where(Hotel.name == hotel_data.name))
     if existing.scalar_one_or_none():
@@ -46,7 +46,7 @@ async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Dep
         "rating": new_hotel.rating,
     }
 
-    await sqs_publisher.publish_hotel_created(hotel_dict)
+    await sns_publisher.publish_hotel_created(hotel_dict)
 
     return new_hotel
 

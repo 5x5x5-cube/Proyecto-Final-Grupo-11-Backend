@@ -27,6 +27,7 @@ class Booking(Base):
     hotel_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     room_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     hold_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     guest_name: Mapped[str | None] = mapped_column(String(200))
     guest_email: Mapped[str | None] = mapped_column(String(254))
     guest_phone: Mapped[str | None] = mapped_column(String(30))

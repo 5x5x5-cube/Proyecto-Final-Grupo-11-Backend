@@ -37,6 +37,7 @@ async def create_booking_endpoint(
 async def list_bookings(
     user_id: uuid.UUID = Depends(get_user_id),
     status: str | None = Query(None),
+    payment_id: uuid.UUID | None = Query(None, alias="paymentId"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
@@ -47,6 +48,10 @@ async def list_bookings(
     if status:
         query = query.where(Booking.status == status)
         count_query = count_query.where(Booking.status == status)
+
+    if payment_id:
+        query = query.where(Booking.payment_id == payment_id)
+        count_query = count_query.where(Booking.payment_id == payment_id)
 
     query = query.order_by(Booking.created_at.desc())
     query = query.offset((page - 1) * limit).limit(limit)
@@ -66,6 +71,7 @@ async def list_bookings(
                 hotelId=b.hotel_id,
                 roomId=b.room_id,
                 holdId=b.hold_id,
+                paymentId=b.payment_id,
                 checkIn=b.check_in,
                 checkOut=b.check_out,
                 guests=b.guests,
@@ -100,6 +106,7 @@ async def get_booking_detail(
         hotelId=booking.hotel_id,
         roomId=booking.room_id,
         holdId=booking.hold_id,
+        paymentId=booking.payment_id,
         checkIn=booking.check_in,
         checkOut=booking.check_out,
         guests=booking.guests,

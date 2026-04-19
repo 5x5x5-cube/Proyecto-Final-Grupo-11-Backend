@@ -153,6 +153,8 @@ class SearchService:
             else:
                 rooms_data = self._get_rooms_scan(hotel_id, min_capacity)
 
+            rooms_data.sort(key=lambda r: r.get("price_per_night", 0))
+
             if not check_in or not check_out:
                 return rooms_data
 

@@ -79,13 +79,13 @@ class Payment(Base):
     payment_method_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_payment_methods.id"), nullable=False
     )
+    cart_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    booking_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     amount: Mapped[float] = mapped_column(DECIMAL(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="COP")
     status: Mapped[str] = mapped_column(String(20), default="processing")
     transaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    booking_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    booking_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

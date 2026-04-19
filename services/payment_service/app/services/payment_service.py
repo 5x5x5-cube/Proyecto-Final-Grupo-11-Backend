@@ -37,8 +37,6 @@ def _build_payment_response(
         amount=float(payment.amount),
         currency=payment.currency,
         transaction_id=payment.transaction_id,
-        booking_id=payment.booking_id,
-        booking_code=payment.booking_code,
         message=message,
         created_at=payment.created_at,
         processed_at=payment.processed_at,
@@ -85,10 +83,26 @@ async def initiate_payment(
     total_price = float(cart.price_breakdown.total)
     currency = cart.price_breakdown.currency
 
+    # Snapshot the booking data from the cart — needed later when the webhook fires
+    booking_snapshot = {
+        "roomId": cart.room_id,
+        "hotelId": cart.hotel_id,
+        "holdId": cart.hold_id,
+        "checkIn": cart.check_in,
+        "checkOut": cart.check_out,
+        "guests": cart.guests,
+        "basePrice": str(cart.price_breakdown.subtotal),
+        "taxAmount": str(cart.price_breakdown.vat),
+        "serviceFee": str(cart.price_breakdown.service_fee),
+        "totalPrice": str(cart.price_breakdown.total),
+    }
+
     payment = Payment(
         id=uuid.uuid4(),
         user_id=user_id,
         payment_method_id=payment_method.id,
+        cart_id=uuid.UUID(cart.id),
+        booking_snapshot=booking_snapshot,
         amount=total_price,
         currency=currency,
         status="processing",
@@ -131,7 +145,9 @@ async def confirm_payment(
 
     if webhook.approved:
         payment.status = "approved"
-        await notify_payment_confirmed(payment, payment.user_id, webhook.transaction_id)
+        await notify_payment_confirmed(
+            payment, payment.user_id, webhook.transaction_id, payment.booking_snapshot
+        )
     else:
         payment.status = "declined"
         payment.error_code = webhook.error_code
