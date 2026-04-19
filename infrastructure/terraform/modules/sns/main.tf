@@ -104,7 +104,7 @@ resource "aws_sns_topic_subscription" "notification" {
   raw_message_delivery = true
 
   filter_policy = jsonencode({
-    entity_type = ["payment"]
+    entity_type = ["payment", "booking"]
   })
 
   filter_policy_scope = "MessageAttributes"
