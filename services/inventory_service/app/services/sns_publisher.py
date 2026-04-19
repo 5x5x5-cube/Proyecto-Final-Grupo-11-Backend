@@ -13,9 +13,12 @@ class SNSPublisher:
     def __init__(self):
         client_kwargs = {
             "region_name": settings.aws_region,
-            "aws_access_key_id": settings.aws_access_key_id,
-            "aws_secret_access_key": settings.aws_secret_access_key,
         }
+        # Only use explicit credentials if they are not the default 'test' values
+        # Otherwise, let boto3 use the IAM role from the service account
+        if settings.aws_access_key_id and settings.aws_access_key_id != "test":
+            client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
         if settings.aws_endpoint_url:
             client_kwargs["endpoint_url"] = settings.aws_endpoint_url
         self.client = boto3.client("sns", **client_kwargs)
@@ -89,7 +92,9 @@ class SNSPublisher:
     async def publish_availability_updated(self, availability_data: Dict[str, Any]) -> bool:
         return await self.publish_event("updated", "availability", availability_data)
 
-    async def publish_tariff_upserted(self, tariff_data: Dict[str, Any], is_update: bool = False) -> bool:
+    async def publish_tariff_upserted(
+        self, tariff_data: Dict[str, Any], is_update: bool = False
+    ) -> bool:
         event_type = "updated" if is_update else "created"
         return await self.publish_event(event_type, "tariff", tariff_data)
 

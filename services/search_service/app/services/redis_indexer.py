@@ -139,7 +139,6 @@ class RedisIndexer:
 
         return True
 
-
     def upsert_tariff(self, room_id: str, tariff: Dict[str, Any]) -> bool:
         """Guarda o actualiza una tarifa en la lista tariffs:{room_id}"""
         try:

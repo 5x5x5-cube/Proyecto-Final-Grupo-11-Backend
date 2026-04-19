@@ -194,7 +194,9 @@ class SearchService:
             rooms.append(room)
         return rooms
 
-    def get_hotel_rooms(self, hotel_id: str, check_in: Optional[date] = None) -> List[Dict[str, Any]]:
+    def get_hotel_rooms(
+        self, hotel_id: str, check_in: Optional[date] = None
+    ) -> List[Dict[str, Any]]:
         """Retorna todas las habitaciones de un hotel específico"""
         rooms = self._get_available_rooms(hotel_id)
         if check_in:

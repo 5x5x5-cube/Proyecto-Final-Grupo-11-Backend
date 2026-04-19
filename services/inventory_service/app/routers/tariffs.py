@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from ..database import get_db
 from ..models import Hotel, Room, Tariff
 from ..schemas import AdminRoomResponse, TariffCreate, TariffResponse, TariffUpdate
-from ..services.sns_publisher import sns_publisher as sqs_publisher
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
 
@@ -25,7 +25,6 @@ def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffRe
         end_date=tariff.end_date,
         created_at=tariff.created_at,
     )
-
 
 
 async def _get_hotel_uuid(hotel_id_header: str | None) -> uuid.UUID:
@@ -53,10 +52,7 @@ async def list_hotel_rooms(
     hotel = hotel_result.scalar_one_or_none()
     location = hotel.city if hotel else ""
 
-    return [
-        AdminRoomResponse(id=r.id, name=r.room_type, location=location)
-        for r in rooms
-    ]
+    return [AdminRoomResponse(id=r.id, name=r.room_type, location=location) for r in rooms]
 
 
 # --- Tariffs CRUD ---
@@ -100,14 +96,16 @@ async def create_tariff(
     db.add(tariff)
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted({
-        "id": str(tariff.id),
-        "room_id": str(tariff.room_id),
-        "rate_type": tariff.rate_type,
-        "price_per_night": float(tariff.price_per_night),
-        "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
-        "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
-    })
+    await sns_publisher.publish_tariff_upserted(
+        {
+            "id": str(tariff.id),
+            "room_id": str(tariff.room_id),
+            "rate_type": tariff.rate_type,
+            "price_per_night": float(tariff.price_per_night),
+            "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
+            "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
+        }
+    )
     return _build_tariff_response(tariff, room, room.hotel)
 
 
@@ -137,14 +135,17 @@ async def update_tariff(
 
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted({
-        "id": str(tariff.id),
-        "room_id": str(tariff.room_id),
-        "rate_type": tariff.rate_type,
-        "price_per_night": float(tariff.price_per_night),
-        "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
-        "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
-    }, is_update=True)
+    await sns_publisher.publish_tariff_upserted(
+        {
+            "id": str(tariff.id),
+            "room_id": str(tariff.room_id),
+            "rate_type": tariff.rate_type,
+            "price_per_night": float(tariff.price_per_night),
+            "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
+            "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
+        },
+        is_update=True,
+    )
     return _build_tariff_response(tariff, tariff.room, tariff.room.hotel)
 
 
@@ -163,4 +164,4 @@ async def delete_tariff(
     }
     await db.delete(tariff)
     await db.commit()
-    await sqs_publisher.publish_tariff_deleted(tariff_data)
+    await sns_publisher.publish_tariff_deleted(tariff_data)
