@@ -92,7 +92,9 @@ class SNSPublisher:
     async def publish_availability_updated(self, availability_data: Dict[str, Any]) -> bool:
         return await self.publish_event("updated", "availability", availability_data)
 
-    async def publish_tariff_upserted(self, tariff_data: Dict[str, Any], is_update: bool = False) -> bool:
+    async def publish_tariff_upserted(
+        self, tariff_data: Dict[str, Any], is_update: bool = False
+    ) -> bool:
         event_type = "updated" if is_update else "created"
         return await self.publish_event(event_type, "tariff", tariff_data)
 

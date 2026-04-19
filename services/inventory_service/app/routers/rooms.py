@@ -83,11 +83,13 @@ async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db))
         db.add(availability)
 
         # Publish availability created event to SQS
-        await sqs_publisher.publish_availability_created({
-            "room_id": str(new_room.id),
-            "date": str(avail_date),
-            "available_quantity": room_data.total_quantity,
-        })
+        await sqs_publisher.publish_availability_created(
+            {
+                "room_id": str(new_room.id),
+                "date": str(avail_date),
+                "available_quantity": room_data.total_quantity,
+            }
+        )
 
     await db.commit()
     await db.refresh(new_room)

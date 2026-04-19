@@ -52,7 +52,9 @@ class Room(Base):
         back_populates="room", cascade="all, delete-orphan"
     )
     holds: Mapped[list["Hold"]] = relationship(back_populates="room", cascade="all, delete-orphan")
-    tariffs: Mapped[list["Tariff"]] = relationship(back_populates="room", cascade="all, delete-orphan")
+    tariffs: Mapped[list["Tariff"]] = relationship(
+        back_populates="room", cascade="all, delete-orphan"
+    )
 
 
 class Availability(Base):

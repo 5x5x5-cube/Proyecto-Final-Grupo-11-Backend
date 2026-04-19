@@ -27,7 +27,6 @@ def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffRe
     )
 
 
-
 async def _get_hotel_uuid(hotel_id_header: str | None) -> uuid.UUID:
     if not hotel_id_header:
         raise HTTPException(status_code=400, detail="X-Hotel-Id header is required")
@@ -53,10 +52,7 @@ async def list_hotel_rooms(
     hotel = hotel_result.scalar_one_or_none()
     location = hotel.city if hotel else ""
 
-    return [
-        AdminRoomResponse(id=r.id, name=r.room_type, location=location)
-        for r in rooms
-    ]
+    return [AdminRoomResponse(id=r.id, name=r.room_type, location=location) for r in rooms]
 
 
 # --- Tariffs CRUD ---
@@ -100,14 +96,16 @@ async def create_tariff(
     db.add(tariff)
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted({
-        "id": str(tariff.id),
-        "room_id": str(tariff.room_id),
-        "rate_type": tariff.rate_type,
-        "price_per_night": float(tariff.price_per_night),
-        "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
-        "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
-    })
+    await sqs_publisher.publish_tariff_upserted(
+        {
+            "id": str(tariff.id),
+            "room_id": str(tariff.room_id),
+            "rate_type": tariff.rate_type,
+            "price_per_night": float(tariff.price_per_night),
+            "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
+            "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
+        }
+    )
     return _build_tariff_response(tariff, room, room.hotel)
 
 
@@ -137,14 +135,17 @@ async def update_tariff(
 
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted({
-        "id": str(tariff.id),
-        "room_id": str(tariff.room_id),
-        "rate_type": tariff.rate_type,
-        "price_per_night": float(tariff.price_per_night),
-        "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
-        "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
-    }, is_update=True)
+    await sqs_publisher.publish_tariff_upserted(
+        {
+            "id": str(tariff.id),
+            "room_id": str(tariff.room_id),
+            "rate_type": tariff.rate_type,
+            "price_per_night": float(tariff.price_per_night),
+            "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
+            "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
+        },
+        is_update=True,
+    )
     return _build_tariff_response(tariff, tariff.room, tariff.room.hotel)
 
 
