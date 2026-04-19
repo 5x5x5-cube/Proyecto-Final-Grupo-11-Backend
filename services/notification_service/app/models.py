@@ -40,7 +40,7 @@ class NotificationHistory(Base):
     sent_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     delivered = Column(Boolean, default=False)
     error_message = Column(Text, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    extra_data = Column(JSONB, nullable=True)
 
 
 Index("idx_notification_history_user_id", NotificationHistory.user_id)
