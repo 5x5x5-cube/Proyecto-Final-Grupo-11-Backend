@@ -1,94 +1,78 @@
-import uuid
-from datetime import datetime
-from typing import Optional
+"""Payment service endpoints — our domain."""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..database import get_db
+from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
+from ..schemas import InitiatePaymentRequest, PaymentConfirmationWebhook, PaymentResponse
+from ..services.cart_client import CartExpiredError, CartNotFoundError
+from ..services.payment_service import confirm_payment
+from ..services.payment_service import get_payment as get_payment_svc
+from ..services.payment_service import initiate_payment
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
-# Base de datos en memoria para pagos
-payments_db = {}
+
+def get_user_id(request: Request) -> uuid.UUID:
+    """Extract and validate the X-User-Id header (resolved by auth service from JWT)."""
+    raw = request.headers.get("X-User-Id")
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing X-User-Id header")
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid X-User-Id header")
 
 
-class PaymentInitiateRequest(BaseModel):
-    booking_id: str
-    amount: float
-    currency: str = "USD"
-    payment_method: str
+@router.post("/initiate", response_model=PaymentResponse, status_code=202)
+async def initiate_payment_endpoint(
+    request: InitiatePaymentRequest,
+    user_id: uuid.UUID = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Initiate a payment. Tokenizes via gateway, saves payment method, fires adapter.
+
+    Returns 202 immediately; client polls GET /{id} for result.
+    """
+    try:
+        return await initiate_payment(db=db, user_id=user_id, request=request)
+    except InvalidTokenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except TokenExpiredError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except CartNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except CartExpiredError as exc:
+        raise HTTPException(status_code=410, detail=str(exc))
 
 
-class PaymentResponse(BaseModel):
-    payment_id: str
-    booking_id: str
-    amount: float
-    currency: str
-    status: str
-    payment_method: str
-    created_at: str
-    payment_url: Optional[str] = None
+@router.post("/{payment_id}/confirmation", status_code=200)
+async def payment_confirmation_webhook(
+    payment_id: uuid.UUID,
+    webhook: PaymentConfirmationWebhook,
+    db: AsyncSession = Depends(get_db),
+):
+    """Webhook called by the Payment Adapter after processing.
 
+    Internal endpoint — not called by clients.
+    """
+    if webhook.payment_id != payment_id:
+        raise HTTPException(status_code=400, detail="Payment ID mismatch")
 
-@router.post("/initiate", response_model=PaymentResponse)
-async def initiate_payment(request: PaymentInitiateRequest):
-    """Iniciar un pago"""
-    payment_id = str(uuid.uuid4())
-
-    payment = {
-        "payment_id": payment_id,
-        "booking_id": request.booking_id,
-        "amount": request.amount,
-        "currency": request.currency,
-        "status": "pending",
-        "payment_method": request.payment_method,
-        "created_at": datetime.utcnow().isoformat(),
-        "payment_url": f"https://payment-gateway.example.com/pay/{payment_id}",
-    }
-
-    payments_db[payment_id] = payment
-
-    return PaymentResponse(**payment)
+    await confirm_payment(db=db, webhook=webhook)
+    return {"status": "received"}
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
-async def get_payment(payment_id: str):
-    """Obtener estado de un pago"""
-    payment = payments_db.get(payment_id)
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-
-    return PaymentResponse(**payment)
-
-
-@router.post("/{payment_id}/confirm")
-async def confirm_payment(payment_id: str):
-    """Confirmar un pago"""
-    payment = payments_db.get(payment_id)
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-
-    payment["status"] = "completed"
-    payment["completed_at"] = datetime.utcnow().isoformat()
-
-    return {
-        "message": "Payment confirmed",
-        "payment_id": payment_id,
-        "status": "completed",
-    }
-
-
-@router.post("/{payment_id}/cancel")
-async def cancel_payment(payment_id: str):
-    """Cancelar un pago"""
-    payment = payments_db.get(payment_id)
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-
-    payment["status"] = "cancelled"
-    payment["cancelled_at"] = datetime.utcnow().isoformat()
-
-    return {
-        "message": "Payment cancelled",
-        "payment_id": payment_id,
-        "status": "cancelled",
-    }
+async def get_payment_endpoint(
+    payment_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get payment details by ID. Client polls this until status != 'processing'."""
+    try:
+        return await get_payment_svc(db=db, payment_id=payment_id)
+    except PaymentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

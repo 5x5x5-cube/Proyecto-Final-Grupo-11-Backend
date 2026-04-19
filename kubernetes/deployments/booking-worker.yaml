@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-worker
+  labels:
+    app: booking-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-worker
+  template:
+    metadata:
+      labels:
+        app: booking-worker
+    spec:
+      serviceAccountName: booking-service-sa
+      containers:
+      - name: booking-worker
+        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
+        command: ["python", "workers/sqs_worker.py"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: booking-service-secrets
+              key: database-url
+        - name: SQS_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: payment-booking-queue-url
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "192Mi"
+            cpu: "250m"

@@ -9,18 +9,20 @@ services:
       - "8090:8000"
     environment:
       - BOOKING_SERVICE_URL=http://booking-service:8000
+      - INVENTORY_SERVICE_URL=http://inventory-service:8000
       - CART_SERVICE_URL=http://cart-service:8000
       - SEARCH_SERVICE_URL=http://search-service:8000
       - DEFAULT_USER_ID=c1000000-0000-0000-0000-000000000001
       - DEFAULT_HOTEL_ID=a1000000-0000-0000-0000-000000000001
       # Descomentar a medida que se implementen los servicios:
       # - AUTH_SERVICE_URL=http://auth-service:8000
-      # - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
       # - REPORTS_SERVICE_URL=http://reports-service:8000
       # - NOTIFICATION_SERVICE_URL=http://notification-service:8000
       # - MONITOR_SERVICE_URL=http://health-copilot:8000
     depends_on:
       - booking-service
+      - inventory-service
       - cart-service
       - search-service
     networks:
@@ -53,6 +55,26 @@ services:
       - postgres
       - redis
       - inventory-service
+    networks:
+      - microservices
+
+  booking-worker:
+    build:
+      context: ./services/booking_service
+      dockerfile: Dockerfile
+    entrypoint: []
+    command: ["python", "-u", "workers/sqs_worker.py"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/payment-booking-queue
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    depends_on:
+      - postgres
+      - localstack
     networks:
       - microservices
 
@@ -133,7 +155,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
       - REDIS_URL=redis://redis:6379/0
       - AWS_ENDPOINT_URL=http://localstack:4566
-      - SQS_QUEUE_URL=http://localstack:4566/000000000000/hotel-sync-queue
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:command-update
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
@@ -178,8 +200,17 @@ services:
       - "8009:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - CART_SERVICE_URL=http://cart-service:8000
+      - BOOKING_SERVICE_URL=http://booking-service:8000
+      - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:command-update
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
     depends_on:
       - postgres
+      - cart-service
+      - localstack
     networks:
       - microservices
 
@@ -220,7 +251,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=sqs
+      - SERVICES=sqs,sns
       - DEBUG=1
       - DATA_DIR=/tmp/localstack/data
     volumes:

@@ -63,14 +63,14 @@ def _make_fake_db_refresh():
 
 
 async def test_create_booking_success():
-    """create_booking inserts a confirmed booking and returns a BookingResponse."""
+    """create_booking inserts a pending booking and returns a BookingResponse."""
     db = AsyncMock()
     db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
 
     request = _make_request()
     result = await create_booking(db=db, user_id=USER_ID, request=request)
 
-    assert result.status == "confirmed"
+    assert result.status == "pending"
     assert result.guests == 2
     assert result.total_price == 595000.0
     assert result.hold_id == HOLD_ID
@@ -80,14 +80,14 @@ async def test_create_booking_success():
     db.refresh.assert_called_once()
 
 
-async def test_create_booking_sets_confirmed_status():
-    """create_booking always sets status to 'confirmed'."""
+async def test_create_booking_sets_pending_status():
+    """create_booking always sets status to 'pending'."""
     db = AsyncMock()
     db.refresh = AsyncMock(side_effect=_make_fake_db_refresh())
 
     result = await create_booking(db=db, user_id=USER_ID, request=_make_request())
 
-    assert result.status == "confirmed"
+    assert result.status == "pending"
 
 
 async def test_create_booking_stores_correct_prices():

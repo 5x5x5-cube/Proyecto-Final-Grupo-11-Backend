@@ -140,4 +140,43 @@ class RedisIndexer:
         return True
 
 
+    def upsert_tariff(self, room_id: str, tariff: Dict[str, Any]) -> bool:
+        """Guarda o actualiza una tarifa en la lista tariffs:{room_id}"""
+        try:
+            key = f"tariffs:{room_id}"
+            tariffs = self.get_tariffs(room_id)
+            tariffs = [t for t in tariffs if t.get("id") != tariff.get("id")]
+            tariffs.append(tariff)
+            self.rc.json_set(key, tariffs)
+            print(f"Upserted tariff {tariff.get('id')} for room {room_id}")
+            return True
+        except Exception as e:
+            print(f"Error upserting tariff for room {room_id}: {e}")
+            return False
+
+    def delete_tariff(self, room_id: str, tariff_id: str) -> bool:
+        """Elimina una tarifa de la lista tariffs:{room_id}"""
+        try:
+            key = f"tariffs:{room_id}"
+            tariffs = self.get_tariffs(room_id)
+            tariffs = [t for t in tariffs if t.get("id") != tariff_id]
+            self.rc.json_set(key, tariffs)
+            print(f"Deleted tariff {tariff_id} for room {room_id}")
+            return True
+        except Exception as e:
+            print(f"Error deleting tariff {tariff_id} for room {room_id}: {e}")
+            return False
+
+    def get_tariffs(self, room_id: str) -> list:
+        """Lee las tarifas de una habitación desde Redis"""
+        try:
+            key = f"tariffs:{room_id}"
+            result = self.rc.json_get(key)
+            if isinstance(result, list):
+                return result[0] if result and isinstance(result[0], list) else result
+            return []
+        except Exception:
+            return []
+
+
 indexer = RedisIndexer()

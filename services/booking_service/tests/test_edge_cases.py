@@ -80,7 +80,7 @@ async def test_same_day_checkout_zero_price():
     result = await create_booking(db=db, user_id=USER_ID, request=request)
 
     assert result.total_price == 0.0
-    assert result.status == "confirmed"
+    assert result.status == "pending"
     db.add.assert_called_once()
     db.commit.assert_called_once()
 
@@ -93,7 +93,7 @@ async def test_multiple_guests_booking():
     result = await create_booking(db=db, user_id=USER_ID, request=_make_request(guests=10))
 
     assert result.guests == 10
-    assert result.status == "confirmed"
+    assert result.status == "pending"
 
 
 async def test_single_guest_booking():
@@ -104,7 +104,7 @@ async def test_single_guest_booking():
     result = await create_booking(db=db, user_id=USER_ID, request=_make_request(guests=1))
 
     assert result.guests == 1
-    assert result.status == "confirmed"
+    assert result.status == "pending"
 
 
 async def test_db_commit_failure_propagates():
@@ -129,7 +129,7 @@ async def test_large_price_values():
     result = await create_booking(db=db, user_id=USER_ID, request=request)
 
     assert result.total_price == pytest.approx(118999999.98)
-    assert result.status == "confirmed"
+    assert result.status == "pending"
 
 
 async def test_hold_id_is_persisted():

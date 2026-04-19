@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Bump version & create release
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && (startsWith(github.event.pull_request.head.ref, 'release/') || startsWith(github.event.pull_request.head.ref, 'hotfix/'))
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version bump
+        id: bump
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          CURRENT=$(grep -m1 '^version = ' services/auth_service/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          if [[ "$BRANCH" == release/* ]]; then
+            NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+          elif [[ "$BRANCH" == hotfix/* ]]; then
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumping $CURRENT → $NEW_VERSION (branch: $BRANCH)"
+
+      - name: Bump version in all services
+        run: |
+          for f in services/*/pyproject.toml; do
+            sed -i "s/^version = \".*\"/version = \"${{ steps.bump.outputs.version }}\"/" "$f"
+            echo "Updated $f"
+          done
+
+      - name: Commit version bump
+        run: |
+          git add services/*/pyproject.toml
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }}"
+          git push
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
+          git push origin "v${{ steps.bump.outputs.version }}"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log --oneline --no-merges "${PREV_TAG}..HEAD~1" 2>/dev/null || echo "Initial release")
+          else
+            NOTES=$(git log --oneline --no-merges -20 HEAD~1 2>/dev/null || echo "Initial release")
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${{ steps.bump.outputs.version }}`,
+              name: `v${{ steps.bump.outputs.version }}`,
+              body: `## Changes\n\n${{ steps.notes.outputs.notes }}`,
+              draft: false,
+              prerelease: false,
+            });

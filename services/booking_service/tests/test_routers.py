@@ -57,7 +57,7 @@ def _make_booking_response() -> BookingResponse:
         checkIn=CHECK_IN,
         checkOut=CHECK_OUT,
         guests=2,
-        status="confirmed",
+        status="pending",
         totalPrice=595000.0,
         currency="COP",
         priceBreakdown=None,
@@ -115,7 +115,7 @@ async def test_post_bookings_success_201():
     assert resp.status_code == 201
     body = resp.json()
     assert body["id"] == str(BOOKING_ID)
-    assert body["status"] == "confirmed"
+    assert body["status"] == "pending"
     assert body["totalPrice"] == 595000.0
     assert body["currency"] == "COP"
 

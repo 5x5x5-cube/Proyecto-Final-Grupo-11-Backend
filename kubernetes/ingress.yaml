@@ -72,6 +72,13 @@ spec:
             name: payment-service
             port:
               number: 80
+      - path: /api/v1/gateway
+        pathType: Prefix
+        backend:
+          service:
+            name: payment-service
+            port:
+              number: 80
       - path: /api/v1/health-copilot
         pathType: Prefix
         backend:

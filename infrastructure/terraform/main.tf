@@ -78,17 +78,28 @@ module "elasticache" {
 
 module "sqs" {
   source = "./modules/sqs"
-  
+
   project_name = var.project_name
   environment  = var.environment
+}
+
+module "sns" {
+  source = "./modules/sns"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  hotel_sync_queue_arn = module.sqs.hotel_sync_queue_arn
+  hotel_sync_queue_url = module.sqs.hotel_sync_queue_url
 }
 
 module "irsa" {
   source = "./modules/irsa"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  eks_oidc_issuer_url    = module.eks.oidc_issuer_url
-  eks_oidc_provider_arn  = module.eks.oidc_provider_arn
-  sqs_access_policy_arn  = module.sqs.sqs_access_policy_arn
+  project_name                          = var.project_name
+  environment                           = var.environment
+  eks_oidc_issuer_url                   = module.eks.oidc_issuer_url
+  eks_oidc_provider_arn                 = module.eks.oidc_provider_arn
+  sqs_access_policy_arn                 = module.sqs.sqs_access_policy_arn
+  sns_publish_policy_arn                = module.sns.sns_publish_policy_arn
+  payment_booking_sqs_access_policy_arn = module.sns.payment_booking_sqs_access_policy_arn
 }

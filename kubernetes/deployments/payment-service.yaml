@@ -25,6 +25,36 @@ spec:
             secretKeyRef:
               name: payment-service-secrets
               key: database-url
+        - name: CART_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: cart-service-url
+        - name: BOOKING_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: booking-service-url
+        - name: PAYMENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: payment-service-url
+        - name: SNS_TOPIC_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: sns-topic-arn
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
         livenessProbe:
           httpGet:
             path: /health
@@ -57,4 +87,3 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
-

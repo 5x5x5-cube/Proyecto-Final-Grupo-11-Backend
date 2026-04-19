@@ -14,6 +14,9 @@ DB_ENDPOINT=$(terraform output -raw rds_endpoint)
 DB_NAME=$(terraform output -raw rds_database_name)
 REDIS_ENDPOINT=$(terraform output -raw redis_endpoint)
 SQS_QUEUE_URL=$(terraform output -raw sqs_hotel_sync_queue_url)
+SNS_TOPIC_ARN=$(terraform output -raw sns_topic_arn)
+PAYMENT_BOOKING_QUEUE_URL=$(terraform output -raw payment_booking_queue_url)
+NOTIFICATION_QUEUE_URL=$(terraform output -raw notification_queue_url)
 INVENTORY_ROLE_ARN=$(terraform output -raw inventory_service_role_arn)
 SEARCH_ROLE_ARN=$(terraform output -raw search_service_role_arn)
 ECR_URLS=$(terraform output -json ecr_repository_urls)
@@ -42,31 +45,33 @@ for service in auth-service booking-service reports-service inventory-service co
   echo "  ✅ Created secret for ${service}"
 done
 
-# Create ConfigMaps for inventory-service
+# Create shared ConfigMaps
 echo ""
-echo "📋 Creating ConfigMaps..."
+echo "📋 Creating shared ConfigMaps..."
 
-kubectl create configmap inventory-service-config \
+kubectl create configmap shared-infra-config \
   --from-literal=redis-url="redis://${REDIS_ENDPOINT}:6379" \
   --from-literal=sqs-queue-url="${SQS_QUEUE_URL}" \
+  --from-literal=sns-topic-arn="${SNS_TOPIC_ARN}" \
+  --from-literal=payment-booking-queue-url="${PAYMENT_BOOKING_QUEUE_URL}" \
+  --from-literal=notification-queue-url="${NOTIFICATION_QUEUE_URL}" \
+  --from-literal=aws-region="us-east-1" \
+  --from-literal=aws-endpoint-url="" \
   --dry-run=client -o yaml | kubectl apply -f -
-echo "  ✅ Created configmap for inventory-service"
+echo "  ✅ Created shared-infra-config (Redis, SQS, SNS, AWS)"
 
-kubectl create configmap search-service-config \
-  --from-literal=redis-url="redis://${REDIS_ENDPOINT}:6379" \
-  --from-literal=sqs-queue-url="${SQS_QUEUE_URL}" \
+kubectl create configmap shared-service-discovery \
+  --from-literal=inventory-service-url="http://inventory-service:80" \
+  --from-literal=booking-service-url="http://booking-service:80" \
+  --from-literal=cart-service-url="http://cart-service:80" \
+  --from-literal=search-service-url="http://search-service:80" \
+  --from-literal=notification-service-url="http://notification-service:80" \
+  --from-literal=auth-service-url="http://auth-service:80" \
+  --from-literal=payment-service-url="http://payment-service:80" \
+  --from-literal=reports-service-url="http://reports-service:80" \
+  --from-literal=commercial-service-url="http://commercial-service:80" \
   --dry-run=client -o yaml | kubectl apply -f -
-echo "  ✅ Created configmap for search-service"
-
-kubectl create configmap cart-service-config \
-  --from-literal=redis-url="redis://${REDIS_ENDPOINT}:6379" \
-  --dry-run=client -o yaml | kubectl apply -f -
-echo "  ✅ Created configmap for cart-service"
-
-kubectl create configmap notification-service-config \
-  --from-literal=redis-url="redis://${REDIS_ENDPOINT}:6379" \
-  --dry-run=client -o yaml | kubectl apply -f -
-echo "  ✅ Created configmap for notification-service"
+echo "  ✅ Created shared-service-discovery (internal service URLs)"
 
 # Replace variables in K8s manifests
 echo ""

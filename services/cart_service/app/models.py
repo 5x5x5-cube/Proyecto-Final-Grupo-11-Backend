@@ -31,6 +31,7 @@ class Cart(Base):
     rating: Mapped[float | None] = mapped_column(DECIMAL(3, 2))
     review_count: Mapped[int | None] = mapped_column(Integer)
     room_features: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

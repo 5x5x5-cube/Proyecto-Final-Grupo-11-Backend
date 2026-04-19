@@ -77,6 +77,7 @@ def build_booking_response(
         hotelId=booking.hotel_id,
         roomId=booking.room_id,
         holdId=booking.hold_id,
+        paymentId=booking.payment_id,
         checkIn=booking.check_in,
         checkOut=booking.check_out,
         guests=booking.guests,
@@ -107,10 +108,11 @@ async def create_booking(
         hotel_id=request.hotel_id,
         room_id=request.room_id,
         hold_id=request.hold_id,
+        payment_id=request.payment_id,
         check_in=request.check_in,
         check_out=request.check_out,
         guests=request.guests,
-        status="confirmed",
+        status="pending",
         base_price=request.base_price,
         tax_amount=request.tax_amount,
         service_fee=request.service_fee,
@@ -193,7 +195,19 @@ async def get_hotel_booking(
     booking = result.scalar_one_or_none()
     if not booking:
         raise BookingNotFoundError(str(booking_id))
-    return build_booking_response(booking)
+
+    # Construye el desglose de precios a partir de los campos almacenados en la reserva
+    nights = max((booking.check_out - booking.check_in).days, 1)
+    price_breakdown = PriceBreakdown(
+        pricePerNight=float(booking.base_price) / nights,
+        nights=nights,
+        basePrice=float(booking.base_price),
+        vat=float(booking.tax_amount),
+        serviceFee=float(booking.service_fee),
+        totalPrice=float(booking.total_price),
+        currency=booking.currency,
+    )
+    return build_booking_response(booking, price_breakdown=price_breakdown)
 
 
 async def update_booking_status(

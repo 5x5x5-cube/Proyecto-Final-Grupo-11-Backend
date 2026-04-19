@@ -8,12 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.models import Availability, Base, Hotel, Room
-from app.services.sqs_publisher import sqs_publisher
+from app.models import Availability, Base, Hotel, Room, Tariff
+from app.services.sns_publisher import sns_publisher
 
 
-async def wait_for_sqs(retries: int = 10, delay: int = 3) -> bool:
-    """Wait until the SQS queue is available."""
+async def wait_for_sns(retries: int = 10, delay: int = 3) -> bool:
+    """Wait until the SNS topic is available."""
     import boto3
     from botocore.exceptions import ClientError
 
@@ -24,16 +24,16 @@ async def wait_for_sqs(retries: int = 10, delay: int = 3) -> bool:
     }
     if settings.aws_endpoint_url:
         client_kwargs["endpoint_url"] = settings.aws_endpoint_url
-    client = boto3.client("sqs", **client_kwargs)
+    client = boto3.client("sns", **client_kwargs)
     for attempt in range(retries):
         try:
-            client.get_queue_url(QueueName="hotel-sync-queue")
-            print("SQS queue ready.")
+            client.get_topic_attributes(TopicArn=settings.sns_topic_arn)
+            print("SNS topic ready.")
             return True
         except ClientError:
-            print(f"SQS not ready, retrying in {delay}s... ({attempt + 1}/{retries})")
+            print(f"SNS not ready, retrying in {delay}s... ({attempt + 1}/{retries})")
             await asyncio.sleep(delay)
-    print("SQS queue not available after retries, skipping publish.")
+    print("SNS topic not available after retries, skipping publish.")
     return False
 
 
@@ -190,7 +190,7 @@ async def seed(db_url: str | None = None) -> None:
             await engine.dispose()
             return
 
-        sqs_ready = await wait_for_sqs()
+        sqs_ready = await wait_for_sns()
         today = date.today()
 
         for hotel_data in HOTELS:
@@ -214,7 +214,7 @@ async def seed(db_url: str | None = None) -> None:
                 "rating": hotel.rating,
             }
             if sqs_ready:
-                await sqs_publisher.publish_hotel_created(hotel_dict)
+                await sns_publisher.publish_hotel_created(hotel_dict)
 
             for room_data in hotel_data["rooms"]:
                 room = Room(
@@ -244,7 +244,7 @@ async def seed(db_url: str | None = None) -> None:
                     "amenities": room.amenities,
                 }
                 if sqs_ready:
-                    await sqs_publisher.publish_room_created(room_dict)
+                    await sns_publisher.publish_room_created(room_dict)
 
                 # Generate availability for each day
                 for i in range(AVAILABILITY_DAYS):
@@ -258,7 +258,7 @@ async def seed(db_url: str | None = None) -> None:
                     db.add(avail)
 
                     if sqs_ready:
-                        await sqs_publisher.publish_availability_created(
+                        await sns_publisher.publish_availability_created(
                             {
                                 "room_id": str(room.id),
                                 "date": str(d),
@@ -266,11 +266,40 @@ async def seed(db_url: str | None = None) -> None:
                             }
                         )
 
+        # Seed tariffs for Hotel Caribe Plaza
+        tariffs_data = [
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000001"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"), "rate_type": "standard",  "price_per_night": 350000,  "start_date": None,              "end_date": None},
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000002"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"), "rate_type": "weekend",   "price_per_night": 420000,  "start_date": None,              "end_date": None},
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000003"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"), "rate_type": "standard",  "price_per_night": 500000,  "start_date": None,              "end_date": None},
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000004"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"), "rate_type": "weekend",   "price_per_night": 600000,  "start_date": None,              "end_date": None},
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000005"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"), "rate_type": "standard",  "price_per_night": 850000,  "start_date": None,              "end_date": None},
+            {"id": uuid.UUID("c1000000-0000-0000-0000-000000000006"), "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"), "rate_type": "season",    "price_per_night": 1100000, "start_date": date(2026, 12, 20), "end_date": date(2027, 1, 10)},
+        ]
+        for t in tariffs_data:
+            db.add(Tariff(
+                id=t["id"],
+                room_id=t["room_id"],
+                rate_type=t["rate_type"],
+                price_per_night=t["price_per_night"],
+                start_date=t["start_date"],
+                end_date=t["end_date"],
+            ))
+            if sqs_ready:
+                await sns_publisher.publish_tariff_upserted({
+                    "id": str(t["id"]),
+                    "room_id": str(t["room_id"]),
+                    "rate_type": t["rate_type"],
+                    "price_per_night": float(t["price_per_night"]),
+                    "start_date": t["start_date"].isoformat() if t["start_date"] else None,
+                    "end_date": t["end_date"].isoformat() if t["end_date"] else None,
+                })
+
         await db.commit()
         print(
             f"Seed complete: {len(HOTELS)} hotels, "
             f"{sum(len(h['rooms']) for h in HOTELS)} rooms, "
-            f"{AVAILABILITY_DAYS} days of availability each."
+            f"{AVAILABILITY_DAYS} days of availability each, "
+            f"{len(tariffs_data)} tariffs."
         )
 
     await engine.dispose()

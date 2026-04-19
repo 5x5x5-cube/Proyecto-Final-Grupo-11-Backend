@@ -9,6 +9,30 @@ from app.services.redis_indexer import indexer
 settings = get_settings()
 
 
+def _get_applicable_price(tariffs: list, check_in: date) -> float | None:
+    is_weekend = check_in.weekday() >= 4
+    candidates = []
+    for t in tariffs:
+        rate_type = t.get("rate_type")
+        start = t.get("start_date")
+        end = t.get("end_date")
+        price = t.get("price_per_night")
+        if rate_type == "season" and start and end:
+            if start <= check_in.isoformat() <= end:
+                candidates.append((0, price))
+        elif rate_type == "promo" and start and end:
+            if start <= check_in.isoformat() <= end:
+                candidates.append((1, price))
+        elif rate_type == "weekend" and is_weekend:
+            candidates.append((2, price))
+        elif rate_type == "standard":
+            candidates.append((3, price))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0])
+    return candidates[0][1]
+
+
 class SearchService:
     def __init__(self):
         self.rc = redis_client
@@ -36,6 +60,13 @@ class SearchService:
             for hotel_data in hotels:
                 hotel_id = hotel_data.get("id")
                 rooms = self._get_available_rooms(hotel_id, guests, check_in, check_out)
+
+                if check_in:
+                    for room in rooms:
+                        room_tariffs = indexer.get_tariffs(room.get("id"))
+                        price = _get_applicable_price(room_tariffs, check_in)
+                        if price is not None:
+                            room["price_per_night"] = price
 
                 if rooms or (not guests and not check_in and not check_out):
                     hotel_data["available_rooms_count"] = len(rooms)
@@ -122,6 +153,8 @@ class SearchService:
             else:
                 rooms_data = self._get_rooms_scan(hotel_id, min_capacity)
 
+            rooms_data.sort(key=lambda r: r.get("price_per_night", 0))
+
             if not check_in or not check_out:
                 return rooms_data
 
@@ -161,9 +194,16 @@ class SearchService:
             rooms.append(room)
         return rooms
 
-    def get_hotel_rooms(self, hotel_id: str) -> List[Dict[str, Any]]:
+    def get_hotel_rooms(self, hotel_id: str, check_in: Optional[date] = None) -> List[Dict[str, Any]]:
         """Retorna todas las habitaciones de un hotel específico"""
-        return self._get_available_rooms(hotel_id)
+        rooms = self._get_available_rooms(hotel_id)
+        if check_in:
+            for room in rooms:
+                room_tariffs = indexer.get_tariffs(room.get("id"))
+                price = _get_applicable_price(room_tariffs, check_in)
+                if price is not None:
+                    room["price_per_night"] = price
+        return rooms
 
     def get_hotel_by_id(self, hotel_id: str) -> Optional[Dict[str, Any]]:
         """

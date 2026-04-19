@@ -52,6 +52,7 @@ class Room(Base):
         back_populates="room", cascade="all, delete-orphan"
     )
     holds: Mapped[list["Hold"]] = relationship(back_populates="room", cascade="all, delete-orphan")
+    tariffs: Mapped[list["Tariff"]] = relationship(back_populates="room", cascade="all, delete-orphan")
 
 
 class Availability(Base):
@@ -96,4 +97,22 @@ class Hold(Base):
     room: Mapped["Room"] = relationship(back_populates="holds")
 
 
-__all__ = ["Hotel", "Room", "Availability", "Hold", "Base"]
+class Tariff(Base):
+    __tablename__ = "tariffs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False
+    )
+    rate_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    price_per_night: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    room: Mapped["Room"] = relationship(back_populates="tariffs")
+
+
+__all__ = ["Hotel", "Room", "Availability", "Hold", "Tariff", "Base"]

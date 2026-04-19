@@ -128,13 +128,13 @@ def test_booking_response():
         checkIn=date(2026, 4, 1),
         checkOut=date(2026, 4, 5),
         guests=2,
-        status="confirmed",
+        status="pending",
         totalPrice=595000,
         currency="COP",
         priceBreakdown=None,
         holdExpiresAt=None,
         createdAt=now,
     )
-    assert resp.status == "confirmed"
+    assert resp.status == "pending"
     assert resp.code == "BK-ABCD1234"
     assert resp.hold_id is not None
