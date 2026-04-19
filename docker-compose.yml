@@ -51,10 +51,12 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
       - REDIS_URL=redis://redis:6379/0
       - INVENTORY_SERVICE_URL=http://inventory-service:8000
+      - AUTH_SERVICE_URL=http://auth-service:8000
     depends_on:
       - postgres
       - redis
       - inventory-service
+      - auth-service
     networks:
       - microservices
 

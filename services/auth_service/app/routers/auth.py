@@ -110,3 +110,16 @@ async def get_current_user(token: str):
         }
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+@router.get("/users/{user_id}")
+async def get_user_by_id(user_id: str):
+    """Internal endpoint: look up a user by ID (no JWT required)."""
+    for user in users_db.values():
+        if user["id"] == user_id:
+            return {
+                "user_id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+            }
+    raise HTTPException(status_code=404, detail="User not found")

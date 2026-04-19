@@ -78,3 +78,27 @@ def test_login_wrong_password():
         "/api/v1/auth/login", json={"email": "wrongpass@example.com", "password": "wrongpass"}
     )
     assert response.status_code == 401
+
+
+def test_get_user_by_id():
+    """Test internal user lookup by ID"""
+    # Register a user first
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": "lookup@example.com", "password": "pass123", "name": "Lookup User"},
+    )
+    user_id = reg.json()["user_id"]
+
+    # Look up by ID
+    response = client.get(f"/api/v1/auth/users/{user_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Lookup User"
+    assert data["email"] == "lookup@example.com"
+    assert data["user_id"] == user_id
+
+
+def test_get_user_by_id_not_found():
+    """Test user lookup with non-existent ID"""
+    response = client.get("/api/v1/auth/users/non-existent-id")
+    assert response.status_code == 404
