@@ -9,8 +9,7 @@ class Settings(BaseSettings):
 
     aws_region: str = "us-east-1"
     aws_endpoint_url: Optional[str] = "http://localhost:4566"
-    sqs_queue_url: str = "http://localhost:4566/000000000000/payment-booking-queue"
-    sns_topic_arn: str = "arn:aws:sns:us-east-1:000000000000:command-update-topic"
+    sqs_queue_url: str = "http://localhost:4566/000000000000/notification-queue"
 
     aws_access_key_id: str = "test"
     aws_secret_access_key: str = "test"
@@ -19,12 +18,8 @@ class Settings(BaseSettings):
     sqs_max_messages: int = 10
     sqs_visibility_timeout: int = 300
 
-    inventory_service_url: str = "http://localhost:8006"
-    cart_service_url: str = "http://localhost:8004"
-
-    jwt_secret_key: str = "dev-secret-key-change-in-production"
-    jwt_algorithm: str = "HS256"
-    jwt_qr_expiration_days: int = 7
+    expo_access_token: Optional[str] = None
+    expo_push_url: str = "https://exp.host/--/api/v2/push/send"
 
     model_config = SettingsConfigDict(env_file=".env")
 

@@ -3,9 +3,11 @@
 import uuid
 from datetime import date, datetime
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..exceptions import BookingAlreadyProcessedError, BookingNotFoundError
 from ..models import Booking
 from ..schemas import (
@@ -17,6 +19,7 @@ from ..schemas import (
     PriceBreakdown,
     UpdateBookingStatusRequest,
 )
+from .sns_publisher import sns_publisher
 
 # Descripciones de eventos para el timeline según el estado de la reserva
 _TIMELINE_DESCRIPTIONS: dict[str, str] = {
@@ -226,8 +229,32 @@ async def update_booking_status(
     if booking.status != "pending":
         raise BookingAlreadyProcessedError(str(booking_id), booking.status)
 
-    booking.status = "confirmed" if request.action == "confirm" else "rejected"
+    new_status = "confirmed" if request.action == "confirm" else "rejected"
+    booking.status = new_status
 
     await db.commit()
     await db.refresh(booking)
+
+    # Get hotel name from inventory service
+    hotel_name = "Hotel"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.inventory_service_url}/hotels/{hotel_id}")
+            if response.status_code == 200:
+                hotel_data = response.json()
+                hotel_name = hotel_data.get("name", "Hotel")
+    except Exception as e:
+        print(f"Error fetching hotel name: {e}")
+
+    # Publish event to SNS
+    await sns_publisher.publish_booking_status_updated(
+        booking_id=str(booking.id),
+        user_id=str(booking.user_id),
+        hotel_id=str(booking.hotel_id),
+        status=new_status,
+        hotel_name=hotel_name,
+        check_in=booking.check_in.isoformat(),
+        check_out=booking.check_out.isoformat(),
+    )
+
     return build_booking_response(booking)
