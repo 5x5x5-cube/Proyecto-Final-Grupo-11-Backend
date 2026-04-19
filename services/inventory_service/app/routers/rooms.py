@@ -10,7 +10,7 @@ from ..database import get_db
 from ..models import Availability, Hotel, Room
 from ..schemas import AvailabilityRangeResponse, AvailabilityResponse, HotelResponse, RoomResponse
 from ..services.availability_service import check_availability, get_room
-from ..services.sqs_publisher import sqs_publisher
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -68,7 +68,7 @@ async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db))
         "total_quantity": new_room.total_quantity,
         "amenities": new_room.amenities,
     }
-    await sqs_publisher.publish_room_created(room_dict)
+    await sns_publisher.publish_room_created(room_dict)
 
     # Generate availability for the next N days
     today = date.today()
@@ -83,7 +83,7 @@ async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db))
         db.add(availability)
 
         # Publish availability created event to SQS
-        await sqs_publisher.publish_availability_created(
+        await sns_publisher.publish_availability_created(
             {
                 "room_id": str(new_room.id),
                 "date": str(avail_date),

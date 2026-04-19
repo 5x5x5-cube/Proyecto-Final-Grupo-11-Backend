@@ -8,7 +8,7 @@ from sqlalchemy.orm import joinedload
 from ..database import get_db
 from ..models import Hotel, Room, Tariff
 from ..schemas import AdminRoomResponse, TariffCreate, TariffResponse, TariffUpdate
-from ..services.sns_publisher import sns_publisher as sqs_publisher
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
 
@@ -96,7 +96,7 @@ async def create_tariff(
     db.add(tariff)
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted(
+    await sns_publisher.publish_tariff_upserted(
         {
             "id": str(tariff.id),
             "room_id": str(tariff.room_id),
@@ -135,7 +135,7 @@ async def update_tariff(
 
     await db.commit()
     await db.refresh(tariff)
-    await sqs_publisher.publish_tariff_upserted(
+    await sns_publisher.publish_tariff_upserted(
         {
             "id": str(tariff.id),
             "room_id": str(tariff.room_id),
@@ -164,4 +164,4 @@ async def delete_tariff(
     }
     await db.delete(tariff)
     await db.commit()
-    await sqs_publisher.publish_tariff_deleted(tariff_data)
+    await sns_publisher.publish_tariff_deleted(tariff_data)
