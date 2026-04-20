@@ -3,7 +3,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import DECIMAL, DateTime, ForeignKey, String
+from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -90,3 +90,15 @@ class Payment(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    rate: Mapped[float] = mapped_column(DECIMAL(12, 6), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(5), nullable=False)
+    decimals: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

@@ -207,6 +207,18 @@ class PaymentDeclinedEvent(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
 
+# ── Exchange Rates ──
+
+
+class ExchangeRateResponse(BaseModel):
+    currency: str
+    rate: float
+    symbol: str
+    decimals: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ── Response ──
 
 

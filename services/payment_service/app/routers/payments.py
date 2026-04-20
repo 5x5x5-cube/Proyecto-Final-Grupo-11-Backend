@@ -1,13 +1,21 @@
 """Payment service endpoints — our domain."""
 
 import uuid
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from ..schemas import InitiatePaymentRequest, PaymentConfirmationWebhook, PaymentResponse
+from ..models import ExchangeRate
+from ..schemas import (
+    ExchangeRateResponse,
+    InitiatePaymentRequest,
+    PaymentConfirmationWebhook,
+    PaymentResponse,
+)
 from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import confirm_payment
 from ..services.payment_service import get_payment as get_payment_svc
@@ -64,6 +72,13 @@ async def payment_confirmation_webhook(
 
     await confirm_payment(db=db, webhook=webhook)
     return {"status": "received"}
+
+
+@router.get("/exchange-rates", response_model=List[ExchangeRateResponse])
+async def get_exchange_rates(db: AsyncSession = Depends(get_db)):
+    """Return current exchange rates (COP base). Public, cacheable."""
+    result = await db.execute(select(ExchangeRate))
+    return result.scalars().all()
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)
