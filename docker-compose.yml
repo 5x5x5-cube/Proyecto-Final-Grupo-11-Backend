@@ -74,9 +74,13 @@ services:
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
+      - INVENTORY_SERVICE_URL=http://inventory-service:8000
+      - CART_SERVICE_URL=http://cart-service:8000
     depends_on:
       - postgres
       - localstack
+      - inventory-service
+      - cart-service
     networks:
       - microservices
 

@@ -40,6 +40,21 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: aws-endpoint-url
+        - name: INVENTORY_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: inventory-service-url
+        - name: CART_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: cart-service-url
+        - name: AUTH_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: auth-service-url
         resources:
           requests:
             memory: "64Mi"
