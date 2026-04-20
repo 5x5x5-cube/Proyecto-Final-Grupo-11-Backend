@@ -74,6 +74,13 @@ async def payment_confirmation_webhook(
     return {"status": "received"}
 
 
+@router.get("/exchange-rates", response_model=List[ExchangeRateResponse])
+async def get_exchange_rates(db: AsyncSession = Depends(get_db)):
+    """Return current exchange rates (COP base). Public, cacheable."""
+    result = await db.execute(select(ExchangeRate))
+    return result.scalars().all()
+
+
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment_endpoint(
     payment_id: uuid.UUID,
@@ -84,10 +91,3 @@ async def get_payment_endpoint(
         return await get_payment_svc(db=db, payment_id=payment_id)
     except PaymentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-
-
-@router.get("/exchange-rates", response_model=List[ExchangeRateResponse])
-async def get_exchange_rates(db: AsyncSession = Depends(get_db)):
-    """Return current exchange rates (COP base). Public, cacheable."""
-    result = await db.execute(select(ExchangeRate))
-    return result.scalars().all()
