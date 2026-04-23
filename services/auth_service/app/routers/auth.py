@@ -1,8 +1,11 @@
 import uuid
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Optional
 
 import jwt
 from fastapi import APIRouter, HTTPException
+from passlib.context import CryptContext
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -12,14 +15,30 @@ SECRET_KEY = "your-secret-key-change-in-production"  # nosec B105
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
 
+# Hashing de contraseñas con bcrypt. Nunca guardamos la contraseña en plano.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+class Role(str, Enum):
+    """Roles soportados por la plataforma.
+
+    - ``traveler``: usuario viajero (app móvil / web pública).
+    - ``hotel_admin``: administrador del portal de hoteles (HU3.1).
+    """
+
+    TRAVELER = "traveler"
+    HOTEL_ADMIN = "hotel_admin"
+
+
 # Base de datos en memoria (en producción usar PostgreSQL)
-users_db = {}
+users_db: dict = {}
 
 
 class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str
+    role: Optional[Role] = Role.TRAVELER
 
 
 class LoginRequest(BaseModel):
@@ -33,6 +52,17 @@ class AuthResponse(BaseModel):
     user_id: str
     email: str
     name: str
+    role: Role
+
+
+def hash_password(plain: str) -> str:
+    """Genera un hash bcrypt de la contraseña."""
+    return pwd_context.hash(plain)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verifica una contraseña contra su hash bcrypt."""
+    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(data: dict):
@@ -43,6 +73,31 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 
+def _seed_hotel_admin() -> None:
+    """Crea un admin de hotel por defecto para desarrollo.
+
+    Solo se ejecuta si el usuario no existe aún. En producción este seed se
+    reemplaza por un alta controlada por el equipo comercial (fuera de alcance
+    de HU3.1 — ver ticket técnico de MFA).
+    """
+    seed_email = "admin@hotel.com"
+    if seed_email in users_db:
+        return
+    users_db[seed_email] = {
+        "id": "hotel-admin-001",
+        "email": seed_email,
+        "password": hash_password("Admin123!"),  # nosec B106 -- dev seed only
+        "name": "Admin Hotel",
+        "role": Role.HOTEL_ADMIN,
+        "created_at": datetime.utcnow(),
+    }
+
+
+# Ejecutar el seed al importar el módulo para que el admin esté disponible
+# desde el primer request (útil en dev y en tests).
+_seed_hotel_admin()
+
+
 @router.post("/register", response_model=AuthResponse)
 async def register(request: RegisterRequest):
     """Registrar un nuevo usuario"""
@@ -50,18 +105,22 @@ async def register(request: RegisterRequest):
     if request.email in users_db:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Crear nuevo usuario
+    # Crear nuevo usuario (contraseña hasheada con bcrypt)
     user_id = str(uuid.uuid4())
+    role = request.role or Role.TRAVELER
     users_db[request.email] = {
         "id": user_id,
         "email": request.email,
-        "password": request.password,  # En producción: hashear con bcrypt
+        "password": hash_password(request.password),
         "name": request.name,
+        "role": role,
         "created_at": datetime.utcnow(),
     }
 
-    # Crear token
-    access_token = create_access_token(data={"sub": user_id, "email": request.email})
+    # Crear token (incluye rol para que el gateway / servicios puedan autorizar)
+    access_token = create_access_token(
+        data={"sub": user_id, "email": request.email, "role": role.value}
+    )
 
     return AuthResponse(
         access_token=access_token,
@@ -69,19 +128,25 @@ async def register(request: RegisterRequest):
         user_id=user_id,
         email=request.email,
         name=request.name,
+        role=role,
     )
 
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest):
     """Iniciar sesión"""
-    # Verificar credenciales
+    # Verificar credenciales. Usamos un mensaje genérico tanto si el usuario no
+    # existe como si la contraseña es incorrecta para evitar enumeración.
     user = users_db.get(request.email)
-    if not user or user["password"] != request.password:
+    if not user or not verify_password(request.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    role: Role = user["role"]
+
     # Crear token
-    access_token = create_access_token(data={"sub": user["id"], "email": request.email})
+    access_token = create_access_token(
+        data={"sub": user["id"], "email": request.email, "role": role.value}
+    )
 
     return AuthResponse(
         access_token=access_token,
@@ -89,6 +154,7 @@ async def login(request: LoginRequest):
         user_id=user["id"],
         email=request.email,
         name=user["name"],
+        role=role,
     )
 
 
@@ -107,6 +173,7 @@ async def get_current_user(token: str):
             "user_id": user["id"],
             "email": user["email"],
             "name": user["name"],
+            "role": user["role"].value,
         }
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -121,5 +188,6 @@ async def get_user_by_id(user_id: str):
                 "user_id": user["id"],
                 "email": user["email"],
                 "name": user["name"],
+                "role": user["role"].value,
             }
     raise HTTPException(status_code=404, detail="User not found")
