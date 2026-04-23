@@ -13,6 +13,7 @@ pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+bcrypt = "<4.0"  # passlib 1.7.4 is incompatible with bcrypt >=4 (backend detection bug)
 python-multipart = "^0.0.6"
 sqlalchemy = "^2.0.25"
 asyncpg = "^0.29.0"
