@@ -39,7 +39,7 @@ async def _get_hotel_uuid(hotel_id_header: str | None) -> uuid.UUID:
 # --- Rooms for hotel admin ---
 
 
-@router.get("/rooms", response_model=list[AdminRoomResponse])
+@router.get("/admin/rooms", response_model=list[AdminRoomResponse])
 async def list_hotel_rooms(
     x_hotel_id: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
@@ -58,7 +58,7 @@ async def list_hotel_rooms(
 # --- Tariffs CRUD ---
 
 
-@router.get("/tariffs", response_model=list[TariffResponse])
+@router.get("", response_model=list[TariffResponse])
 async def list_tariffs(
     x_hotel_id: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
@@ -74,7 +74,7 @@ async def list_tariffs(
     return [_build_tariff_response(t, t.room, t.room.hotel) for t in tariffs]
 
 
-@router.post("/tariffs", response_model=TariffResponse, status_code=201)
+@router.post("", response_model=TariffResponse, status_code=201)
 async def create_tariff(
     body: TariffCreate,
     db: AsyncSession = Depends(get_db),
@@ -109,7 +109,7 @@ async def create_tariff(
     return _build_tariff_response(tariff, room, room.hotel)
 
 
-@router.put("/tariffs/{tariff_id}", response_model=TariffResponse)
+@router.put("/{tariff_id}", response_model=TariffResponse)
 async def update_tariff(
     tariff_id: uuid.UUID,
     body: TariffUpdate,
@@ -149,7 +149,7 @@ async def update_tariff(
     return _build_tariff_response(tariff, tariff.room, tariff.room.hotel)
 
 
-@router.delete("/tariffs/{tariff_id}", status_code=204)
+@router.delete("/{tariff_id}", status_code=204)
 async def delete_tariff(
     tariff_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
