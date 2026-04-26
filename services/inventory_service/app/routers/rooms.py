@@ -28,6 +28,19 @@ class RoomCreate(BaseModel):
     availability_days: int = Field(default=60, ge=1, le=365)
 
 
+@router.get("", response_model=list[RoomResponse])
+async def list_rooms(
+    hotel_id: str | None = Query(None, description="Filter rooms by hotel ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all rooms, optionally filtered by hotel_id"""
+    query = select(Room)
+    if hotel_id:
+        query = query.where(Room.hotel_id == uuid.UUID(hotel_id))
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
 @router.post("", response_model=RoomResponse, status_code=201)
 async def create_room(room_data: RoomCreate, db: AsyncSession = Depends(get_db)):
     """
