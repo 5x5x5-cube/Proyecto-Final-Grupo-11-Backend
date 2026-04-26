@@ -21,7 +21,7 @@ class Hotel(Base):
     address: Mapped[str | None] = mapped_column(String(255))
     rating: Mapped[float | None] = mapped_column(DECIMAL(2, 1))
     status: Mapped[str] = mapped_column(String(20), default="active")
-    admin_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    admin_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
