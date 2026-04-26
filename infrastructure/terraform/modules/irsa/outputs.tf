@@ -17,3 +17,8 @@ output "booking_service_role_arn" {
   description = "IAM role ARN for booking-service"
   value       = aws_iam_role.booking_service.arn
 }
+
+output "notification_service_role_arn" {
+  description = "IAM role ARN for notification-service"
+  value       = aws_iam_role.notification_service.arn
+}

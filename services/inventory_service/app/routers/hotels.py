@@ -2,6 +2,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,10 @@ from ..schemas.hotel import HotelCreate, HotelResponse
 from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/hotels", tags=["hotels"])
+
+
+class HotelAdminUpdate(BaseModel):
+    admin_id: UUID = Field(..., description="UUID of the hotel admin")
 
 
 @router.post("/webhook", response_model=HotelResponse, status_code=201)
@@ -66,3 +71,34 @@ async def get_hotel(hotel_id: UUID, db: AsyncSession = Depends(get_db)):
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
     return hotel
+
+
+@router.put("/{hotel_id}/admin", response_model=HotelResponse)
+async def update_hotel_admin(
+    hotel_id: UUID, admin_data: HotelAdminUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Associate or update hotel admin"""
+    result = await db.execute(select(Hotel).where(Hotel.id == hotel_id))
+    hotel = result.scalar_one_or_none()
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    hotel.admin_id = admin_data.admin_id
+    await db.commit()
+    await db.refresh(hotel)
+
+    return hotel
+
+
+@router.get("/{hotel_id}/admin")
+async def get_hotel_admin(hotel_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get hotel admin ID"""
+    result = await db.execute(select(Hotel).where(Hotel.id == hotel_id))
+    hotel = result.scalar_one_or_none()
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    if not hotel.admin_id:
+        return {"admin_id": None}
+
+    return {"admin_id": hotel.admin_id}
