@@ -61,14 +61,11 @@ async def list_hotels(
     skip: int = 0, limit: int = 100, admin_id: str | None = None, db: AsyncSession = Depends(get_db)
 ):
     """List all hotels, optionally filtered by admin_id"""
-    print(f"DEBUG list_hotels - admin_id: {admin_id}")
     query = select(Hotel).offset(skip).limit(limit)
     if admin_id:
         query = query.where(Hotel.admin_id == admin_id)
     result = await db.execute(query)
-    hotels = result.scalars().all()
-    print(f"DEBUG list_hotels - returning {len(hotels)} hotels")
-    return hotels
+    return result.scalars().all()
 
 
 @router.get("/{hotel_id}", response_model=HotelResponse)
