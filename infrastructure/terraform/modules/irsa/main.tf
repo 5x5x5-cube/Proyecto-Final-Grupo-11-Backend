@@ -126,3 +126,39 @@ resource "aws_iam_role_policy_attachment" "inventory_sns" {
   role       = aws_iam_role.inventory_service.name
   policy_arn = var.sns_publish_policy_arn
 }
+
+resource "aws_iam_role" "notification_service" {
+  name = "${var.project_name}-${var.environment}-notification-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = var.eks_oidc_provider_arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(var.eks_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:default:notification-service-sa"
+          "${replace(var.eks_oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = {
+    Environment = var.environment
+    Service     = "notification-service"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "notification_sqs" {
+  role       = aws_iam_role.notification_service.name
+  policy_arn = var.sqs_access_policy_arn
+}
+
+resource "aws_iam_role_policy_attachment" "notification_sns" {
+  role       = aws_iam_role.notification_service.name
+  policy_arn = var.sns_publish_policy_arn
+}
