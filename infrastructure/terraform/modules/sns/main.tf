@@ -78,7 +78,7 @@ resource "aws_sns_topic_subscription" "hotel_sync" {
   raw_message_delivery = true
 
   filter_policy = jsonencode({
-    entity_type = ["hotel", "room", "availability"]
+    entity_type = ["hotel", "room", "availability", "tariff"]
   })
 
   filter_policy_scope = "MessageAttributes"
