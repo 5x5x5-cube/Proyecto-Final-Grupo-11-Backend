@@ -5,6 +5,8 @@ Revises: 001
 Create Date: 2026-04-26
 
 """
+from typing import Sequence, Union
+
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
