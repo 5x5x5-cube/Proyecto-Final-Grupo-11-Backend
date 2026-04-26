@@ -11,7 +11,7 @@ from ..models import Hotel
 from ..schemas.hotel import HotelCreate, HotelResponse
 from ..services.sns_publisher import sns_publisher
 
-router = APIRouter(prefix="/", tags=["hotels"])
+router = APIRouter(prefix="", tags=["hotels"])
 
 
 class HotelAdminUpdate(BaseModel):
