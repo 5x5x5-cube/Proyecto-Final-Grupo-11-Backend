@@ -45,6 +45,7 @@ HOTELS = [
         "city": "Cartagena",
         "country": "Colombia",
         "rating": 4.5,
+        "admin_id": "hotel-admin-001",
         "rooms": [
             {
                 "id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
@@ -201,6 +202,7 @@ async def seed(db_url: str | None = None) -> None:
                 city=hotel_data["city"],
                 country=hotel_data["country"],
                 rating=hotel_data["rating"],
+                admin_id=hotel_data.get("admin_id"),
             )
             db.add(hotel)
             await db.flush()

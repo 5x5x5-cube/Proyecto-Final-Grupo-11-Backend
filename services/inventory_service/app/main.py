@@ -38,10 +38,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(hotels.router)
-app.include_router(rooms.router)
-app.include_router(holds.router)
-app.include_router(tariffs.router)
+app.include_router(hotels.router, prefix="/api/v1/inventory")
+app.include_router(rooms.router, prefix="/api/v1/inventory")
+app.include_router(holds.router, prefix="/api/v1/inventory")
+app.include_router(tariffs.router, prefix="/api/v1/inventory")
 
 
 # --- Exception handlers ---
