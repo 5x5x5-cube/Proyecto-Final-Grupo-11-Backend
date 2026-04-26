@@ -19,8 +19,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column("hotels", "admin_id", existing_type=UUID(as_uuid=True), type_=sa.String(255), nullable=True)
+    op.alter_column(
+        "hotels",
+        "admin_id",
+        existing_type=UUID(as_uuid=True),
+        type_=sa.String(255),
+        nullable=True,
+    )
 
 
 def downgrade() -> None:
-    op.alter_column("hotels", "admin_id", existing_type=sa.String(255), type_=UUID(as_uuid=True), nullable=True)
+    op.alter_column(
+        "hotels",
+        "admin_id",
+        existing_type=sa.String(255),
+        type_=UUID(as_uuid=True),
+        nullable=True,
+    )
