@@ -57,9 +57,14 @@ async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Dep
 
 
 @router.get("", response_model=List[HotelResponse])
-async def list_hotels(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    """List all hotels"""
-    result = await db.execute(select(Hotel).offset(skip).limit(limit))
+async def list_hotels(
+    skip: int = 0, limit: int = 100, admin_id: str | None = None, db: AsyncSession = Depends(get_db)
+):
+    """List all hotels, optionally filtered by admin_id"""
+    query = select(Hotel).offset(skip).limit(limit)
+    if admin_id:
+        query = query.where(Hotel.admin_id == admin_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
