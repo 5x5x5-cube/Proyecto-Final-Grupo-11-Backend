@@ -2,6 +2,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,10 @@ from ..schemas.hotel import HotelCreate, HotelResponse
 from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/hotels", tags=["hotels"])
+
+
+class HotelAdminUpdate(BaseModel):
+    admin_id: str = Field(..., description="ID of the hotel admin (string)")
 
 
 @router.post("/webhook", response_model=HotelResponse, status_code=201)
@@ -52,9 +57,14 @@ async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Dep
 
 
 @router.get("", response_model=List[HotelResponse])
-async def list_hotels(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    """List all hotels"""
-    result = await db.execute(select(Hotel).offset(skip).limit(limit))
+async def list_hotels(
+    skip: int = 0, limit: int = 100, admin_id: str | None = None, db: AsyncSession = Depends(get_db)
+):
+    """List all hotels, optionally filtered by admin_id"""
+    query = select(Hotel).offset(skip).limit(limit)
+    if admin_id:
+        query = query.where(Hotel.admin_id == admin_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -66,3 +76,34 @@ async def get_hotel(hotel_id: UUID, db: AsyncSession = Depends(get_db)):
     if not hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
     return hotel
+
+
+@router.put("/{hotel_id}/admin", response_model=HotelResponse)
+async def update_hotel_admin(
+    hotel_id: UUID, admin_data: HotelAdminUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Associate or update hotel admin"""
+    result = await db.execute(select(Hotel).where(Hotel.id == hotel_id))
+    hotel = result.scalar_one_or_none()
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    hotel.admin_id = admin_data.admin_id
+    await db.commit()
+    await db.refresh(hotel)
+
+    return hotel
+
+
+@router.get("/{hotel_id}/admin")
+async def get_hotel_admin(hotel_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get hotel admin ID"""
+    result = await db.execute(select(Hotel).where(Hotel.id == hotel_id))
+    hotel = result.scalar_one_or_none()
+    if not hotel:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    if not hotel.admin_id:
+        return {"admin_id": None}
+
+    return {"admin_id": hotel.admin_id}

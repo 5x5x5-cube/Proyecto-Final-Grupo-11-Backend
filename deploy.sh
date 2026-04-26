@@ -120,11 +120,18 @@ DATABASE_URL="postgresql+asyncpg://dbadmin:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/
 REDIS_URL="redis://${REDIS_ENDPOINT}:6379"
 
 # Secrets con database-url por servicio
-for SVC in auth-service inventory-service cart-service payment-service booking-service; do
+for SVC in auth-service inventory-service cart-service payment-service booking-service notification-service; do
     kubectl create secret generic ${SVC}-secrets \
       --from-literal=database-url="$DATABASE_URL" \
       --dry-run=client -o yaml | kubectl apply -f -
 done
+
+# Agregar expo-access-token a notification-service-secrets
+# TODO: Reemplazar con token real de Expo
+kubectl create secret generic notification-service-secrets \
+  --from-literal=database-url="$DATABASE_URL" \
+  --from-literal=expo-access-token="your-expo-access-token-here" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 echo -e "${GREEN}Secrets creados${NC}"
 

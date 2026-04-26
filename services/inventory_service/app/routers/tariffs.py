@@ -10,7 +10,7 @@ from ..models import Hotel, Room, Tariff
 from ..schemas import AdminRoomResponse, TariffCreate, TariffResponse, TariffUpdate
 from ..services.sns_publisher import sns_publisher
 
-router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
+router = APIRouter(prefix="/tariffs", tags=["inventory"])
 
 
 def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffResponse:

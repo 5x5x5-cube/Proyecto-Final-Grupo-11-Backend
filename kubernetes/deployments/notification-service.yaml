@@ -1,3 +1,10 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notification-service-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-notification-service-role
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,17 +21,43 @@ spec:
       labels:
         app: notification-service
     spec:
+      serviceAccountName: notification-service-sa
       containers:
       - name: notification-service
         image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-notification-service:latest
         ports:
         - containerPort: 8000
         env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: database-url
         - name: REDIS_URL
           valueFrom:
             configMapKeyRef:
               name: shared-infra-config
               key: redis-url
+        - name: NOTIFICATION_QUEUE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: notification-queue-url
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
+        - name: EXPO_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: notification-service-secrets
+              key: expo-access-token
         livenessProbe:
           httpGet:
             path: /health
@@ -42,8 +75,8 @@ spec:
             memory: "64Mi"
             cpu: "50m"
           limits:
-            memory: "192Mi"
-            cpu: "250m"
+            memory: "128Mi"
+            cpu: "130m"
 ---
 apiVersion: v1
 kind: Service
