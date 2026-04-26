@@ -15,7 +15,7 @@ router = APIRouter(prefix="/hotels", tags=["hotels"])
 
 
 class HotelAdminUpdate(BaseModel):
-    admin_id: UUID = Field(..., description="UUID of the hotel admin")
+    admin_id: str = Field(..., description="ID of the hotel admin (string)")
 
 
 @router.post("/webhook", response_model=HotelResponse, status_code=201)

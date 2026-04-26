@@ -11,7 +11,7 @@ class HotelBase(BaseModel):
     country: str = Field(..., min_length=1, max_length=100)
     address: Optional[str] = None
     rating: Optional[float] = Field(None, ge=0, le=5)
-    admin_id: Optional[UUID] = None
+    admin_id: Optional[str] = None
 
 
 class HotelCreate(HotelBase):
