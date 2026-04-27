@@ -27,7 +27,7 @@ ROUTE_RULES: list[tuple[str, str, AuthMode]] = [
     ("GET", r"^/api/v1/inventory/tariffs$", AuthMode.HOTEL_ADMIN),
     ("ANY", r"^/api/v1/inventory/", AuthMode.PUBLIC),
     # --- Bookings: mixed ---
-    ("ANY", r"^/api/v1/bookings/hotel/", AuthMode.HOTEL_ADMIN),
+    ("ANY", r"^/api/v1/bookings/hotel(/|$|\?)", AuthMode.HOTEL_ADMIN),
     ("POST", r"^/api/v1/bookings$", AuthMode.TRAVELER),
     ("GET", r"^/api/v1/bookings$", AuthMode.TRAVELER),
     ("GET", r"^/api/v1/bookings/[^/]+/qr$", AuthMode.TRAVELER),
