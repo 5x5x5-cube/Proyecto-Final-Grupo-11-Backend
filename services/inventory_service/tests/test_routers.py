@@ -121,7 +121,7 @@ async def test_get_room_200(client):
     room = make_room()
 
     with patch("app.routers.rooms.get_room", new=AsyncMock(return_value=room)):
-        response = await client.get(f"/rooms/{ROOM_ID}")
+        response = await client.get(f"/api/v1/inventory/rooms/{ROOM_ID}")
 
     assert response.status_code == 200
     body = response.json()
@@ -136,7 +136,7 @@ async def test_get_room_404(client):
         "app.routers.rooms.get_room",
         new=AsyncMock(side_effect=RoomNotFoundError(str(ROOM_ID))),
     ):
-        response = await client.get(f"/rooms/{ROOM_ID}")
+        response = await client.get(f"/api/v1/inventory/rooms/{ROOM_ID}")
 
     assert response.status_code == 404
     body = response.json()
@@ -153,7 +153,7 @@ async def test_get_room_availability_200(client):
 
     with patch("app.routers.rooms.check_availability", new=AsyncMock(return_value=rows)):
         response = await client.get(
-            f"/rooms/{ROOM_ID}/availability",
+            f"/api/v1/inventory/rooms/{ROOM_ID}/availability",
             params={"checkIn": "2026-04-01", "checkOut": "2026-04-03"},
         )
 
@@ -172,7 +172,7 @@ async def test_get_room_availability_unavailable_propagates_409(client):
         new=AsyncMock(side_effect=RoomUnavailableError(str(ROOM_ID), ["2026-04-01", "2026-04-02"])),
     ):
         response = await client.get(
-            f"/rooms/{ROOM_ID}/availability",
+            f"/api/v1/inventory/rooms/{ROOM_ID}/availability",
             params={"checkIn": "2026-04-01", "checkOut": "2026-04-03"},
         )
 
@@ -192,7 +192,7 @@ async def test_create_hold_201(client):
 
     with patch("app.routers.holds.create_hold", new=AsyncMock(return_value=hold)):
         response = await client.post(
-            "/holds",
+            "/api/v1/inventory/holds",
             json={
                 "roomId": str(ROOM_ID),
                 "checkIn": "2026-04-01",
@@ -213,7 +213,7 @@ async def test_create_hold_201(client):
 async def test_create_hold_401_missing_user_id_header(client):
     """POST /holds returns 401 when X-User-Id header is missing."""
     response = await client.post(
-        "/holds",
+        "/api/v1/inventory/holds",
         json={
             "roomId": str(ROOM_ID),
             "checkIn": "2026-04-01",
@@ -227,7 +227,7 @@ async def test_create_hold_401_missing_user_id_header(client):
 async def test_create_hold_401_invalid_user_id_header(client):
     """POST /holds returns 401 when X-User-Id header is not a valid UUID."""
     response = await client.post(
-        "/holds",
+        "/api/v1/inventory/holds",
         json={
             "roomId": str(ROOM_ID),
             "checkIn": "2026-04-01",
@@ -246,7 +246,7 @@ async def test_create_hold_409_room_held(client):
         new=AsyncMock(side_effect=RoomHeldError(str(ROOM_ID), str(OTHER_USER_ID))),
     ):
         response = await client.post(
-            "/holds",
+            "/api/v1/inventory/holds",
             json={
                 "roomId": str(ROOM_ID),
                 "checkIn": "2026-04-01",
@@ -267,7 +267,7 @@ async def test_create_hold_409_room_unavailable(client):
         new=AsyncMock(side_effect=RoomUnavailableError(str(ROOM_ID), ["2026-04-01", "2026-04-02"])),
     ):
         response = await client.post(
-            "/holds",
+            "/api/v1/inventory/holds",
             json={
                 "roomId": str(ROOM_ID),
                 "checkIn": "2026-04-01",
@@ -286,7 +286,7 @@ async def test_create_hold_409_room_unavailable(client):
 async def test_delete_hold_204(client):
     """DELETE /holds/{id} returns 204 on successful release."""
     with patch("app.routers.holds.release_hold", new=AsyncMock(return_value=None)):
-        response = await client.delete(f"/holds/{HOLD_ID}")
+        response = await client.delete(f"/api/v1/inventory/holds/{HOLD_ID}")
 
     assert response.status_code == 204
     assert response.content == b""
@@ -298,7 +298,7 @@ async def test_delete_hold_404(client):
         "app.routers.holds.release_hold",
         new=AsyncMock(side_effect=HoldNotFoundError(str(HOLD_ID))),
     ):
-        response = await client.delete(f"/holds/{HOLD_ID}")
+        response = await client.delete(f"/api/v1/inventory/holds/{HOLD_ID}")
 
     assert response.status_code == 404
     body = response.json()
@@ -312,7 +312,7 @@ async def test_check_hold_not_held(client, mock_db):
 
     with patch("app.routers.holds.check_hold", new=AsyncMock(return_value=check_result)):
         response = await client.get(
-            f"/holds/check/{ROOM_ID}",
+            f"/api/v1/inventory/holds/check/{ROOM_ID}",
             params={
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
@@ -343,7 +343,7 @@ async def test_check_hold_held_by_other(client, mock_db):
 
     with patch("app.routers.holds.check_hold", new=AsyncMock(return_value=check_result)):
         response = await client.get(
-            f"/holds/check/{ROOM_ID}",
+            f"/api/v1/inventory/holds/check/{ROOM_ID}",
             params={
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
@@ -361,7 +361,7 @@ async def test_check_hold_held_by_other(client, mock_db):
 async def test_check_hold_401_missing_user_id_header(client):
     """GET /holds/check/{room_id} returns 401 when X-User-Id header is missing."""
     response = await client.get(
-        f"/holds/check/{ROOM_ID}",
+        f"/api/v1/inventory/holds/check/{ROOM_ID}",
         params={
             "checkIn": "2026-04-01",
             "checkOut": "2026-04-03",
@@ -387,7 +387,7 @@ async def test_check_hold_returns_expires_at(client, mock_db):
 
     with patch("app.routers.holds.check_hold", new=AsyncMock(return_value=check_result)):
         response = await client.get(
-            f"/holds/check/{ROOM_ID}",
+            f"/api/v1/inventory/holds/check/{ROOM_ID}",
             params={
                 "checkIn": "2026-04-01",
                 "checkOut": "2026-04-03",
