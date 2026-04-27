@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     reports_service_url: str = ""
     notification_service_url: str = ""
     monitor_service_url: str = ""
+    auth_timeout_seconds: float = 5.0
 
     model_config = SettingsConfigDict(env_file=".env")
 
