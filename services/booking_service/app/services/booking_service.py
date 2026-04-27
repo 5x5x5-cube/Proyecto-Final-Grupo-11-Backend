@@ -96,6 +96,7 @@ def build_booking_response(
         guestName=booking.guest_name,
         guestEmail=booking.guest_email,
         guestPhone=booking.guest_phone,
+        nights=max((booking.check_out - booking.check_in).days, 1),
         timeline=_build_timeline(booking),
     )
 
@@ -133,6 +134,47 @@ async def create_booking(
     return build_booking_response(booking)
 
 
+async def _fetch_inventory_data(
+    hotel_ids: set[uuid.UUID], room_ids: set[uuid.UUID]
+) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Batch-fetch hotel and room data from inventory service."""
+    if not settings.inventory_service_url:
+        return {}, {}
+    hotels: dict[str, dict] = {}
+    rooms: dict[str, dict] = {}
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            for hid in hotel_ids:
+                resp = await client.get(f"{settings.inventory_service_url}/hotels/{hid}")
+                if resp.status_code == 200:
+                    hotels[str(hid)] = resp.json()
+            for rid in room_ids:
+                resp = await client.get(f"{settings.inventory_service_url}/rooms/{rid}")
+                if resp.status_code == 200:
+                    rooms[str(rid)] = resp.json()
+    except Exception as e:  # nosec B110
+        logger.warning("Failed to fetch inventory data: %s", e)
+    return hotels, rooms
+
+
+def _enrich_with_inventory(
+    responses: list[BookingResponse],
+    hotels: dict[str, dict],
+    rooms: dict[str, dict],
+) -> None:
+    """Enrich booking responses with hotel/room names from inventory service."""
+    for r in responses:
+        hotel = hotels.get(str(r.hotel_id))
+        if hotel:
+            r.hotel_name = hotel.get("name")
+            city = hotel.get("city", "")
+            country = hotel.get("country", "")
+            r.location = f"{city}, {country}" if city else None
+        room = rooms.get(str(r.room_id))
+        if room:
+            r.room_name = room.get("room_type")
+
+
 async def _fetch_user_names(user_ids: set[uuid.UUID]) -> dict[str, dict]:
     """Batch-fetch user profiles from auth service. Returns {user_id_str: {name, email}}."""
     if not settings.auth_service_url or not user_ids:
@@ -149,16 +191,26 @@ async def _fetch_user_names(user_ids: set[uuid.UUID]) -> dict[str, dict]:
     return result
 
 
-def _enrich_responses(
-    responses: list[BookingResponse], user_map: dict[str, dict]
-) -> list[BookingResponse]:
+def _enrich_with_users(responses: list[BookingResponse], user_map: dict[str, dict]) -> None:
     """Enrich booking responses with guest names from auth service data."""
     for r in responses:
         user_data = user_map.get(str(r.user_id))
         if user_data and not r.guest_name:
             r.guest_name = user_data.get("name")
             r.guest_email = user_data.get("email")
-    return responses
+
+
+async def enrich_booking_responses(responses: list[BookingResponse], bookings: list) -> None:
+    """Enrich booking responses with hotel/room names and guest names."""
+    hotel_ids = {b.hotel_id for b in bookings}
+    room_ids = {b.room_id for b in bookings}
+    user_ids = {b.user_id for b in bookings}
+
+    hotels, rooms = await _fetch_inventory_data(hotel_ids, room_ids)
+    user_map = await _fetch_user_names(user_ids)
+
+    _enrich_with_inventory(responses, hotels, rooms)
+    _enrich_with_users(responses, user_map)
 
 
 async def list_hotel_bookings(
@@ -209,11 +261,7 @@ async def list_hotel_bookings(
     bookings = result.scalars().all()
 
     responses = [build_booking_response(b) for b in bookings]
-
-    # Enrich with guest names from auth service
-    user_ids = {b.user_id for b in bookings}
-    user_map = await _fetch_user_names(user_ids)
-    _enrich_responses(responses, user_map)
+    await enrich_booking_responses(responses, bookings)
 
     return HotelBookingListResponse(
         data=responses,
@@ -249,11 +297,7 @@ async def get_hotel_booking(
         currency=booking.currency,
     )
     response = build_booking_response(booking, price_breakdown=price_breakdown)
-
-    # Enrich with guest name from auth service
-    user_map = await _fetch_user_names({booking.user_id})
-    _enrich_responses([response], user_map)
-
+    await enrich_booking_responses([response], [booking])
     return response
 
 

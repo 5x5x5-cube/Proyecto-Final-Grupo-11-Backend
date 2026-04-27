@@ -64,6 +64,10 @@ class BookingResponse(BaseModel):
     guest_name: str | None = Field(None, alias="guestName")
     guest_email: str | None = Field(None, alias="guestEmail")
     guest_phone: str | None = Field(None, alias="guestPhone")
+    hotel_name: str | None = Field(None, alias="hotelName")
+    room_name: str | None = Field(None, alias="roomName")
+    location: str | None = Field(None)
+    nights: int = Field(0)
     timeline: list[BookingTimelineEvent] = Field(default_factory=list)
 
 
