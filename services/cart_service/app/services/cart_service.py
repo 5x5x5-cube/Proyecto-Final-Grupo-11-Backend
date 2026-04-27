@@ -74,8 +74,8 @@ async def upsert_cart(
     check_out: date,
     guests: int,
 ) -> CartResponse:
-    # 1. Check for existing cart
-    result = await db.execute(select(Cart).where(Cart.user_id == user_id))
+    # 1. Check for existing active cart
+    result = await db.execute(select(Cart).where(Cart.user_id == user_id, Cart.status == "active"))
     existing = result.scalar_one_or_none()
 
     if existing is not None:
@@ -138,8 +138,19 @@ async def upsert_cart(
     return _build_response(cart)
 
 
+async def complete_cart(db: AsyncSession, user_id: uuid.UUID) -> None:
+    result = await db.execute(select(Cart).where(Cart.user_id == user_id, Cart.status == "active"))
+    cart = result.scalar_one_or_none()
+
+    if cart is None:
+        raise CartNotFoundError(str(user_id))
+
+    cart.status = "completed"
+    await db.commit()
+
+
 async def get_cart(db: AsyncSession, user_id: uuid.UUID) -> CartResponse:
-    result = await db.execute(select(Cart).where(Cart.user_id == user_id))
+    result = await db.execute(select(Cart).where(Cart.user_id == user_id, Cart.status == "active"))
     cart = result.scalar_one_or_none()
 
     if cart is None:

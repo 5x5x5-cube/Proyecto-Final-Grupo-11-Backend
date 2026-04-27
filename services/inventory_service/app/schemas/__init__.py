@@ -80,6 +80,45 @@ class HoldCheckResponse(BaseModel):
     expires_at: datetime | None = None
 
 
+# --- Tariff schemas ---
+
+
+class TariffCreate(BaseModel):
+    room_id: uuid.UUID
+    rate_type: str
+    price_per_night: float
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class TariffUpdate(BaseModel):
+    rate_type: str | None = None
+    price_per_night: float | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class TariffResponse(BaseModel):
+    id: uuid.UUID
+    room_id: uuid.UUID
+    room_name: str
+    room_location: str
+    rate_type: str
+    price_per_night: float
+    start_date: date | None = None
+    end_date: date | None = None
+    created_at: datetime
+
+
+# --- Admin room schemas ---
+
+
+class AdminRoomResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    location: str
+
+
 # --- Error schemas ---
 
 
@@ -100,4 +139,8 @@ __all__ = [
     "HoldResponse",
     "HoldCheckResponse",
     "ErrorResponse",
+    "TariffCreate",
+    "TariffUpdate",
+    "TariffResponse",
+    "AdminRoomResponse",
 ]

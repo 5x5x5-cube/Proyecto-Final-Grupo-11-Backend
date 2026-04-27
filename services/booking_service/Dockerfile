@@ -10,6 +10,7 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root --only main
 
 COPY ./app ./app
+COPY ./workers ./workers
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
 COPY entrypoint.sh ./

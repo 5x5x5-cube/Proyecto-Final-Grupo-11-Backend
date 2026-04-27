@@ -1,3 +1,10 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payment-service-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-payment-service-role
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,6 +21,7 @@ spec:
       labels:
         app: payment-service
     spec:
+      serviceAccountName: payment-service-sa
       containers:
       - name: payment-service
         image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-payment-service:latest
@@ -25,6 +33,36 @@ spec:
             secretKeyRef:
               name: payment-service-secrets
               key: database-url
+        - name: CART_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: cart-service-url
+        - name: BOOKING_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: booking-service-url
+        - name: PAYMENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-service-discovery
+              key: payment-service-url
+        - name: SNS_TOPIC_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: sns-topic-arn
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
         livenessProbe:
           httpGet:
             path: /health
@@ -42,8 +80,8 @@ spec:
             memory: "64Mi"
             cpu: "50m"
           limits:
-            memory: "192Mi"
-            cpu: "250m"
+            memory: "128Mi"
+            cpu: "130m"
 ---
 apiVersion: v1
 kind: Service
@@ -57,4 +95,3 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
-

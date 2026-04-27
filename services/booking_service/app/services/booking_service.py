@@ -1,11 +1,14 @@
 """Core booking business logic."""
 
+import logging
 import uuid
 from datetime import date, datetime
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..exceptions import BookingAlreadyProcessedError, BookingNotFoundError
 from ..models import Booking
 from ..schemas import (
@@ -17,6 +20,9 @@ from ..schemas import (
     PriceBreakdown,
     UpdateBookingStatusRequest,
 )
+from .sns_publisher import sns_publisher
+
+logger = logging.getLogger(__name__)
 
 # Descripciones de eventos para el timeline según el estado de la reserva
 _TIMELINE_DESCRIPTIONS: dict[str, str] = {
@@ -77,6 +83,7 @@ def build_booking_response(
         hotelId=booking.hotel_id,
         roomId=booking.room_id,
         holdId=booking.hold_id,
+        paymentId=booking.payment_id,
         checkIn=booking.check_in,
         checkOut=booking.check_out,
         guests=booking.guests,
@@ -107,6 +114,7 @@ async def create_booking(
         hotel_id=request.hotel_id,
         room_id=request.room_id,
         hold_id=request.hold_id,
+        payment_id=request.payment_id,
         check_in=request.check_in,
         check_out=request.check_out,
         guests=request.guests,
@@ -123,6 +131,34 @@ async def create_booking(
     await db.commit()
     await db.refresh(booking)
     return build_booking_response(booking)
+
+
+async def _fetch_user_names(user_ids: set[uuid.UUID]) -> dict[str, dict]:
+    """Batch-fetch user profiles from auth service. Returns {user_id_str: {name, email}}."""
+    if not settings.auth_service_url or not user_ids:
+        return {}
+    result: dict[str, dict] = {}
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            for uid in user_ids:
+                resp = await client.get(f"{settings.auth_service_url}/api/v1/auth/users/{uid}")
+                if resp.status_code == 200:
+                    result[str(uid)] = resp.json()
+    except Exception as e:  # nosec B110
+        logger.warning("Failed to fetch user names from auth: %s", e)
+    return result
+
+
+def _enrich_responses(
+    responses: list[BookingResponse], user_map: dict[str, dict]
+) -> list[BookingResponse]:
+    """Enrich booking responses with guest names from auth service data."""
+    for r in responses:
+        user_data = user_map.get(str(r.user_id))
+        if user_data and not r.guest_name:
+            r.guest_name = user_data.get("name")
+            r.guest_email = user_data.get("email")
+    return responses
 
 
 async def list_hotel_bookings(
@@ -172,8 +208,15 @@ async def list_hotel_bookings(
     result = await db.execute(paged_query)
     bookings = result.scalars().all()
 
+    responses = [build_booking_response(b) for b in bookings]
+
+    # Enrich with guest names from auth service
+    user_ids = {b.user_id for b in bookings}
+    user_map = await _fetch_user_names(user_ids)
+    _enrich_responses(responses, user_map)
+
     return HotelBookingListResponse(
-        data=[build_booking_response(b) for b in bookings],
+        data=responses,
         total=total,
         page=page,
         limit=limit,
@@ -205,7 +248,13 @@ async def get_hotel_booking(
         totalPrice=float(booking.total_price),
         currency=booking.currency,
     )
-    return build_booking_response(booking, price_breakdown=price_breakdown)
+    response = build_booking_response(booking, price_breakdown=price_breakdown)
+
+    # Enrich with guest name from auth service
+    user_map = await _fetch_user_names({booking.user_id})
+    _enrich_responses([response], user_map)
+
+    return response
 
 
 async def update_booking_status(
@@ -224,8 +273,32 @@ async def update_booking_status(
     if booking.status != "pending":
         raise BookingAlreadyProcessedError(str(booking_id), booking.status)
 
-    booking.status = "confirmed" if request.action == "confirm" else "rejected"
+    new_status = "confirmed" if request.action == "confirm" else "rejected"
+    booking.status = new_status
 
     await db.commit()
     await db.refresh(booking)
+
+    # Get hotel name from inventory service
+    hotel_name = "Hotel"
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.inventory_service_url}/hotels/{hotel_id}")
+            if response.status_code == 200:
+                hotel_data = response.json()
+                hotel_name = hotel_data.get("name", "Hotel")
+    except Exception as e:
+        print(f"Error fetching hotel name: {e}")
+
+    # Publish event to SNS
+    await sns_publisher.publish_booking_status_updated(
+        booking_id=str(booking.id),
+        user_id=str(booking.user_id),
+        hotel_id=str(booking.hotel_id),
+        status=new_status,
+        hotel_name=hotel_name,
+        check_in=booking.check_in.isoformat(),
+        check_out=booking.check_out.isoformat(),
+    )
+
     return build_booking_response(booking)

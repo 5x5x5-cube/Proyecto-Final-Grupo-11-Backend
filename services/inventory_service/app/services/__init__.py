@@ -1,3 +1,3 @@
-from .sqs_publisher import sqs_publisher
+from .sns_publisher import sns_publisher
 
-__all__ = ["sqs_publisher"]
+__all__ = ["sns_publisher"]

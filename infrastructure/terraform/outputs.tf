@@ -58,3 +58,28 @@ output "search_service_role_arn" {
   description = "IAM role ARN for search-service IRSA"
   value       = module.irsa.search_service_role_arn
 }
+
+output "payment_service_role_arn" {
+  description = "IAM role ARN for payment-service IRSA"
+  value       = module.irsa.payment_service_role_arn
+}
+
+output "booking_service_role_arn" {
+  description = "IAM role ARN for booking-service IRSA"
+  value       = module.irsa.booking_service_role_arn
+}
+
+output "sns_topic_arn" {
+  description = "ARN of the command-update SNS topic"
+  value       = module.sns.sns_topic_arn
+}
+
+output "sns_payment_booking_queue_url" {
+  description = "Payment-booking SQS queue URL"
+  value       = module.sns.payment_booking_queue_url
+}
+
+output "sns_notification_queue_url" {
+  description = "Notification SQS queue URL"
+  value       = module.sns.notification_queue_url
+}

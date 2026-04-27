@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     booking_service_url: str = "http://localhost:8002"
+    inventory_service_url: str = ""
     auth_service_url: str = ""
     search_service_url: str = ""
     cart_service_url: str = ""
@@ -26,10 +27,12 @@ def get_service_routes() -> dict[str, str | None]:
     """
     return {
         "bookings": settings.booking_service_url or None,
+        "inventory": settings.inventory_service_url or None,
         "auth": settings.auth_service_url or None,
         "search": settings.search_service_url or None,
         "cart": settings.cart_service_url or None,
         "payments": settings.payment_service_url or None,
+        "gateway": settings.payment_service_url or None,
         "reports": settings.reports_service_url or None,
         "notifications": settings.notification_service_url or None,
         "monitor": settings.monitor_service_url or None,

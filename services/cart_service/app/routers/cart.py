@@ -48,6 +48,15 @@ async def get_cart_endpoint(
     return await cart_service.get_cart(db=db, user_id=user_id)
 
 
+@router.patch("/cart/complete", status_code=200)
+async def complete_cart_endpoint(
+    user_id: uuid.UUID = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await cart_service.complete_cart(db=db, user_id=user_id)
+    return {"message": "Cart completed"}
+
+
 @router.delete("/cart", status_code=204)
 async def delete_cart_endpoint(
     user_id: uuid.UUID = Depends(get_user_id),

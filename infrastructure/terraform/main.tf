@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -23,7 +23,7 @@ provider "aws" {
 
 module "vpc" {
   source = "./modules/vpc"
-  
+
   project_name = var.project_name
   environment  = var.environment
   vpc_cidr     = var.vpc_cidr
@@ -32,7 +32,7 @@ module "vpc" {
 
 module "eks" {
   source = "./modules/eks"
-  
+
   project_name        = var.project_name
   environment         = var.environment
   aws_region          = var.aws_region
@@ -47,7 +47,7 @@ module "eks" {
 
 module "ecr" {
   source = "./modules/ecr"
-  
+
   project_name = var.project_name
   environment  = var.environment
   repositories = var.ecr_repositories
@@ -55,7 +55,7 @@ module "ecr" {
 
 module "rds" {
   source = "./modules/rds"
-  
+
   project_name       = var.project_name
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
@@ -67,7 +67,7 @@ module "rds" {
 
 module "elasticache" {
   source = "./modules/elasticache"
-  
+
   project_name       = var.project_name
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
@@ -78,17 +78,28 @@ module "elasticache" {
 
 module "sqs" {
   source = "./modules/sqs"
-  
+
   project_name = var.project_name
   environment  = var.environment
+}
+
+module "sns" {
+  source = "./modules/sns"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  hotel_sync_queue_arn = module.sqs.hotel_sync_queue_arn
+  hotel_sync_queue_url = module.sqs.hotel_sync_queue_url
 }
 
 module "irsa" {
   source = "./modules/irsa"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  eks_oidc_issuer_url    = module.eks.oidc_issuer_url
-  eks_oidc_provider_arn  = module.eks.oidc_provider_arn
-  sqs_access_policy_arn  = module.sqs.sqs_access_policy_arn
+  project_name                          = var.project_name
+  environment                           = var.environment
+  eks_oidc_issuer_url                   = module.eks.oidc_issuer_url
+  eks_oidc_provider_arn                 = module.eks.oidc_provider_arn
+  sqs_access_policy_arn                 = module.sqs.sqs_access_policy_arn
+  sns_publish_policy_arn                = module.sns.sns_publish_policy_arn
+  payment_booking_sqs_access_policy_arn = module.sns.payment_booking_sqs_access_policy_arn
 }

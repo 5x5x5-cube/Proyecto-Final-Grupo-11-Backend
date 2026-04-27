@@ -17,6 +17,11 @@ resource "aws_internet_gateway" "main" {
     Name        = "${var.project_name}-${var.environment}-igw"
     Environment = var.environment
   }
+
+  timeouts {
+    create = "10m"
+    delete = "10m"
+  }
 }
 
 resource "aws_subnet" "public" {
@@ -27,10 +32,15 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                           = "${var.project_name}-${var.environment}-public-${var.azs[count.index]}"
-    Environment                                    = var.environment
-    "kubernetes.io/role/elb"                       = "1"
+    Name                                                           = "${var.project_name}-${var.environment}-public-${var.azs[count.index]}"
+    Environment                                                    = var.environment
+    "kubernetes.io/role/elb"                                       = "1"
     "kubernetes.io/cluster/${var.project_name}-${var.environment}" = "shared"
+  }
+
+  timeouts {
+    create = "10m"
+    delete = "10m"
   }
 }
 
@@ -41,10 +51,15 @@ resource "aws_subnet" "private" {
   availability_zone = var.azs[count.index]
 
   tags = {
-    Name                                           = "${var.project_name}-${var.environment}-private-${var.azs[count.index]}"
-    Environment                                    = var.environment
-    "kubernetes.io/role/internal-elb"              = "1"
+    Name                                                           = "${var.project_name}-${var.environment}-private-${var.azs[count.index]}"
+    Environment                                                    = var.environment
+    "kubernetes.io/role/internal-elb"                              = "1"
     "kubernetes.io/cluster/${var.project_name}-${var.environment}" = "shared"
+  }
+
+  timeouts {
+    create = "10m"
+    delete = "10m"
   }
 }
 

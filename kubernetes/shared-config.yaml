@@ -5,6 +5,9 @@ metadata:
 data:
   redis-url: "${REDIS_URL}"
   sqs-queue-url: "${SQS_QUEUE_URL}"
+  sns-topic-arn: "${SNS_TOPIC_ARN}"
+  payment-booking-queue-url: "${PAYMENT_BOOKING_QUEUE_URL}"
+  notification-queue-url: "${NOTIFICATION_QUEUE_URL}"
   aws-region: "us-east-1"
   aws-endpoint-url: ""
 ---

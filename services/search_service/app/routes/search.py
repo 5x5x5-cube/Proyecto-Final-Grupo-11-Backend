@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -53,7 +53,7 @@ async def search_hotels(
             )
 
     if check_in:
-        if check_in < date.today():
+        if check_in < date.today() - timedelta(days=1):
             raise HTTPException(status_code=400, detail="Check-in date cannot be in the past")
 
     if guests is not None and guests <= 0:
@@ -92,12 +92,12 @@ async def get_hotel_detail(hotel_id: str):
 
 
 @router.get("/hotels/{hotel_id}/rooms")
-async def get_hotel_rooms(hotel_id: str):
+async def get_hotel_rooms(hotel_id: str, check_in: Optional[date] = Query(None)):
     """
     Retorna las habitaciones disponibles de un hotel específico.
     Se usa cuando el usuario presiona 'Ver habitaciones' en la pantalla de detalle.
     """
-    rooms = search_service.get_hotel_rooms(hotel_id)
+    rooms = search_service.get_hotel_rooms(hotel_id, check_in)
 
     if not rooms:
         return {"hotel_id": hotel_id, "rooms": [], "message": "No rooms available"}
