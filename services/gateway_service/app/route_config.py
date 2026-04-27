@@ -20,14 +20,14 @@ ROUTE_RULES: list[tuple[str, str, AuthMode]] = [
     # --- Fully public ---
     ("ANY", r"^/api/v1/auth/", AuthMode.PUBLIC),
     ("ANY", r"^/api/v1/search/", AuthMode.PUBLIC),
-    # --- Inventory: mostly public, holds and tariff admin need auth ---
+    # --- Inventory: mostly public, holds need traveler auth, tariffs need hotel admin ---
     ("POST", r"^/api/v1/inventory/holds$", AuthMode.TRAVELER),
     ("GET", r"^/api/v1/inventory/holds/check/", AuthMode.TRAVELER),
-    ("GET", r"^/api/v1/inventory/tariffs/admin/", AuthMode.HOTEL_ADMIN),
-    ("GET", r"^/api/v1/inventory/tariffs$", AuthMode.HOTEL_ADMIN),
+    ("ANY", r"^/api/v1/inventory/tariffs", AuthMode.HOTEL_ADMIN),
     ("ANY", r"^/api/v1/inventory/", AuthMode.PUBLIC),
     # --- Bookings: mixed ---
     ("ANY", r"^/api/v1/bookings/hotel(/|$|\?)", AuthMode.HOTEL_ADMIN),
+    ("ANY", r"^/api/v1/bookings/discounts", AuthMode.HOTEL_ADMIN),
     ("POST", r"^/api/v1/bookings$", AuthMode.TRAVELER),
     ("GET", r"^/api/v1/bookings$", AuthMode.TRAVELER),
     ("GET", r"^/api/v1/bookings/[^/]+/qr$", AuthMode.TRAVELER),
@@ -37,7 +37,9 @@ ROUTE_RULES: list[tuple[str, str, AuthMode]] = [
     ("POST", r"^/api/v1/payments/initiate$", AuthMode.TRAVELER),
     ("ANY", r"^/api/v1/payments/", AuthMode.PUBLIC),
     ("ANY", r"^/api/v1/gateway/", AuthMode.PUBLIC),
-    # --- Fully protected ---
+    # --- Reports: hotel admin only ---
+    ("ANY", r"^/api/v1/reports/", AuthMode.HOTEL_ADMIN),
+    # --- Fully protected (traveler) ---
     ("ANY", r"^/api/v1/cart", AuthMode.TRAVELER),
     ("ANY", r"^/api/v1/notifications/", AuthMode.TRAVELER),
     # --- Default: fail-closed ---
