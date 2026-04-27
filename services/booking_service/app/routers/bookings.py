@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -40,6 +40,7 @@ async def create_booking_endpoint(
 async def list_bookings(
     user_id: uuid.UUID = Depends(get_user_id),
     status: str | None = Query(None),
+    timeframe: str | None = Query(None, pattern="^(active|past)$"),
     payment_id: uuid.UUID | None = Query(None, alias="paymentId"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
@@ -51,6 +52,16 @@ async def list_bookings(
     if status:
         query = query.where(Booking.status == status)
         count_query = count_query.where(Booking.status == status)
+
+    today = date.today()
+    if timeframe == "active":
+        query = query.where(Booking.check_out >= today, Booking.status.notin_(["cancelled"]))
+        count_query = count_query.where(
+            Booking.check_out >= today, Booking.status.notin_(["cancelled"])
+        )
+    elif timeframe == "past":
+        query = query.where(Booking.check_out < today)
+        count_query = count_query.where(Booking.check_out < today)
 
     if payment_id:
         query = query.where(Booking.payment_id == payment_id)
