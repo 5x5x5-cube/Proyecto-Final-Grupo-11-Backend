@@ -145,11 +145,15 @@ async def _fetch_inventory_data(
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             for hid in hotel_ids:
-                resp = await client.get(f"{settings.inventory_service_url}/hotels/{hid}")
+                resp = await client.get(
+                    f"{settings.inventory_service_url}/api/v1/inventory/hotels/{hid}"
+                )
                 if resp.status_code == 200:
                     hotels[str(hid)] = resp.json()
             for rid in room_ids:
-                resp = await client.get(f"{settings.inventory_service_url}/rooms/{rid}")
+                resp = await client.get(
+                    f"{settings.inventory_service_url}/api/v1/inventory/rooms/{rid}"
+                )
                 if resp.status_code == 200:
                     rooms[str(rid)] = resp.json()
     except Exception as e:  # nosec B110
@@ -327,7 +331,9 @@ async def update_booking_status(
     hotel_name = "Hotel"
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.inventory_service_url}/hotels/{hotel_id}")
+            response = await client.get(
+                f"{settings.inventory_service_url}/api/v1/inventory/hotels/{hotel_id}"
+            )
             if response.status_code == 200:
                 hotel_data = response.json()
                 hotel_name = hotel_data.get("name", "Hotel")
