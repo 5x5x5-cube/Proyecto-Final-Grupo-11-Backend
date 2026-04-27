@@ -11,11 +11,10 @@ from ..config import settings
 
 class SNSPublisher:
     def __init__(self):
-        client_kwargs = {
-            "region_name": settings.aws_region,
-            "aws_access_key_id": settings.aws_access_key_id,
-            "aws_secret_access_key": settings.aws_secret_access_key,
-        }
+        client_kwargs = {"region_name": settings.aws_region}
+        if settings.aws_access_key_id and settings.aws_access_key_id != "test":
+            client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
         if settings.aws_endpoint_url:
             client_kwargs["endpoint_url"] = settings.aws_endpoint_url
         self.client = boto3.client("sns", **client_kwargs)
