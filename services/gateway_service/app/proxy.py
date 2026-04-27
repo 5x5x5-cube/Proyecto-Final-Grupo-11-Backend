@@ -34,14 +34,6 @@ async def proxy_request(request: Request, target_base_url: str) -> Response:
     hop_by_hop = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
     headers = {k: v for k, v in request.headers.items() if k.lower() not in hop_by_hop}
 
-    # Inject default X-User-Id when no auth service exists yet
-    if "x-user-id" not in headers and settings.default_user_id:
-        headers["X-User-Id"] = settings.default_user_id
-
-    # Inject default X-Hotel-Id when no auth service exists yet
-    if "x-hotel-id" not in headers and settings.default_hotel_id:
-        headers["X-Hotel-Id"] = settings.default_hotel_id
-
     logger.info(f"Proxying {request.method} {request.url.path} -> {target_url}")
 
     async with httpx.AsyncClient(timeout=30) as client:
