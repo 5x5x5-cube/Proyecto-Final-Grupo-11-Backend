@@ -78,7 +78,7 @@ async def get_room(room_id: uuid.UUID) -> dict:
 async def get_room_hotel(room_id: uuid.UUID) -> dict:
     """GET /rooms/{room_id}/hotel — retrieve hotel details for a room."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
-        response = await client.get(f"/rooms/{room_id}/hotel")
+        response = await client.get(f"/api/v1/inventory/rooms/{room_id}/hotel")
     if response.status_code == 200:
         return response.json()
     if response.status_code == 404:
