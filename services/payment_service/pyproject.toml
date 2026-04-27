@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "payment-service"
-version = "0.3.0"
+version = "0.4.0"
 description = "Payment Processing Service"
 authors = ["Your Team <team@example.com>"]
 readme = "README.md"
