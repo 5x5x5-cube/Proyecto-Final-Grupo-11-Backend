@@ -1,6 +1,6 @@
 terraform {
   required_version = ">= 1.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -23,7 +23,7 @@ provider "aws" {
 
 module "vpc" {
   source = "./modules/vpc"
-  
+
   project_name = var.project_name
   environment  = var.environment
   vpc_cidr     = var.vpc_cidr
@@ -32,7 +32,7 @@ module "vpc" {
 
 module "eks" {
   source = "./modules/eks"
-  
+
   project_name        = var.project_name
   environment         = var.environment
   aws_region          = var.aws_region
@@ -47,7 +47,7 @@ module "eks" {
 
 module "ecr" {
   source = "./modules/ecr"
-  
+
   project_name = var.project_name
   environment  = var.environment
   repositories = var.ecr_repositories
@@ -55,7 +55,7 @@ module "ecr" {
 
 module "rds" {
   source = "./modules/rds"
-  
+
   project_name       = var.project_name
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
@@ -67,7 +67,7 @@ module "rds" {
 
 module "elasticache" {
   source = "./modules/elasticache"
-  
+
   project_name       = var.project_name
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
