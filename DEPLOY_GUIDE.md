@@ -1,25 +1,30 @@
 # Guía de Despliegue - Proyecto Final
 
-## Prerrequisitos (solo la primera vez)
+## Arquitectura
 
-1. **AWS CLI v2**: [Descargar](https://awscli.amazonaws.com/AWSCLIV2.msi)
-2. **Terraform**: [Descargar](https://developer.hashicorp.com/terraform/downloads)
-3. **kubectl**: [Descargar](https://dl.k8s.io/release/v1.31.0/bin/windows/amd64/kubectl.exe)
-4. **Docker Desktop**: [Descargar](https://www.docker.com/products/docker-desktop)
-5. **Git Bash**: Incluido con [Git for Windows](https://gitforwindows.org/)
-6. **aws-iam-authenticator** (requerido en Windows):
-   ```bash
-   mkdir -p ~/bin
-   curl -Lo ~/bin/aws-iam-authenticator.exe \
-     https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v0.6.26/aws-iam-authenticator_0.6.26_windows_amd64.exe
-   ```
-   > **¿Por qué?** AWS CLI v2 en Windows es un bundle PyInstaller que crashea al ser
-   > ejecutado como subproceso por kubectl. `aws-iam-authenticator` es un binario Go
-   > nativo que no tiene este problema. `deploy.sh` lo detecta automáticamente.
+```
+Internet → NLB → NGINX Ingress → gateway-service → backend services
+                                       ↓
+                              auth-service (token validation)
+                              inventory-service (hotel resolution)
+```
 
-7. **Configurar credenciales AWS**:
+Todo el tráfico `/api/v1/*` pasa por el **gateway-service**, que:
+- Valida tokens JWT via el auth-service
+- Inyecta `X-User-Id` y `X-Hotel-Id` en las requests hacia los servicios internos
+- Los clientes solo envían `Authorization: Bearer <token>`
+
+---
+
+## Prerrequisitos
+
+1. **AWS CLI v2** instalado y configurado
+2. **Terraform** >= 1.0
+3. **kubectl** instalado
+4. **Docker Desktop** con soporte para `--platform linux/amd64`
+5. **Credenciales AWS** configuradas:
    ```bash
-   aws configure
+   aws configure --profile maestria
    # AWS Access Key ID: <tu-key>
    # AWS Secret Access Key: <tu-secret>
    # Default region name: us-east-1
@@ -30,150 +35,317 @@
 
 ## Crear TODO desde cero
 
-Abre **Git Bash** y ejecuta desde la raíz del proyecto:
+### Paso 1: Crear backend de Terraform
 
-### Paso 1: Crear infraestructura con Terraform (~15-20 min)
+El state de Terraform se almacena en S3. El nombre del bucket debe ser globalmente único.
+
+```bash
+# Crear bucket S3 para state (usar tu account ID para unicidad)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --profile maestria --query Account --output text)
+
+aws s3 mb s3://proyecto-final-tf-state-${AWS_ACCOUNT_ID} --region us-east-1 --profile maestria
+
+aws s3api put-bucket-versioning \
+  --bucket proyecto-final-tf-state-${AWS_ACCOUNT_ID} \
+  --versioning-configuration Status=Enabled \
+  --profile maestria
+
+# Crear tabla DynamoDB para locks
+aws dynamodb create-table \
+  --table-name proyecto-final-terraform-locks \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1 \
+  --profile maestria
+```
+
+> **IMPORTANTE**: Actualizar el bucket name en `infrastructure/terraform/main.tf` → backend "s3" → bucket.
+
+### Paso 2: Crear infraestructura con Terraform (~15-20 min)
 
 ```bash
 cd infrastructure/terraform
-terraform init
-terraform apply
+AWS_PROFILE=maestria terraform init
+AWS_PROFILE=maestria terraform plan -var-file=terraform.tfvars
+AWS_PROFILE=maestria terraform apply -var-file=terraform.tfvars
 # Escribir "yes" cuando pregunte
 ```
 
 Terraform crea:
-- **VPC** con subnets públicas y privadas
-- **EKS** cluster con 1 nodo t3.small
-- **RDS** PostgreSQL
-- **ElastiCache** Redis
-- **SQS** cola de sincronización de hoteles
-- **ECR** repositorios Docker por servicio
-- **IAM roles** para IRSA (inventory-service, search-service)
+- **VPC** con subnets públicas y privadas, NAT Gateway
+- **EKS** cluster con 2 nodos t3.small
+- **RDS** PostgreSQL (db.t3.micro)
+- **ElastiCache** Redis (cache.t3.micro)
+- **SQS** colas (hotel-sync, payment-booking, notification) + DLQs
+- **SNS** topic (command-update) con suscripciones a las colas
+- **ECR** 11 repositorios Docker (incluye gateway-service)
+- **IAM roles** IRSA para inventory, search, payment, booking, notification
 
-> **IMPORTANTE**: No interrumpir. Si falla por error de red, ejecutar `terraform apply` de nuevo.
-> Si aparece error de lock: `terraform force-unlock <LOCK-ID>`
+> Si falla con error `ResourceInUseException` en EKS Access Entry, importar:
+> ```bash
+> AWS_PROFILE=maestria terraform import 'module.eks.aws_eks_access_entry.admin' \
+>   'proyecto-final-dev:arn:aws:iam::<ACCOUNT_ID>:root'
+> ```
+> Luego re-ejecutar `terraform apply`.
 
-### Paso 2: Desplegar aplicaciones
+> Si falla ElastiCache con `InvalidCredentialsException`, es transitorio — re-ejecutar `terraform apply`.
+
+### Paso 3: Configurar kubectl
 
 ```bash
-cd ../..   # volver a la raíz del proyecto
-./deploy.sh
+AWS_PROFILE=maestria aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1
+AWS_PROFILE=maestria kubectl get nodes  # debe mostrar 2 nodos Ready
 ```
 
-El script `deploy.sh` realiza automáticamente:
-1. Genera kubeconfig con `aws-iam-authenticator` (evita bug de PyInstaller en Windows)
-2. Verifica acceso al cluster (`kubectl get nodes`)
-3. Lee outputs de Terraform (DB endpoint, Redis, SQS)
-4. Crea **Secrets** de Kubernetes por servicio:
-   - `auth-service-secrets` → `database-url` (PostgreSQL connection string)
-   - `inventory-service-secrets` → `database-url`
-5. Crea **ConfigMaps** de Kubernetes por servicio:
-   - `cart-service-config` → `redis-url`
-   - `notification-service-config` → `redis-url`
-   - `inventory-service-config` → `redis-url`, `sqs-queue-url`
-   - `search-service-config` → `redis-url`, `sqs-queue-url`
-6. Login a ECR y build/push de imágenes Docker
-7. Aplica deployments de Kubernetes
-8. Aplica Ingress y espera el Load Balancer
-
-### Paso 3: Verificar
+### Paso 4: Crear Secrets y ConfigMaps
 
 ```bash
-kubectl get pods          # todos deben estar Running
-kubectl get svc           # ver servicios
-kubectl get ingress       # ver URL del Load Balancer
+cd infrastructure/terraform
+
+# Obtener outputs de Terraform
+DB_ENDPOINT=$(AWS_PROFILE=maestria terraform output -raw rds_endpoint)
+DB_NAME=$(AWS_PROFILE=maestria terraform output -raw rds_database_name)
+REDIS_ENDPOINT=$(AWS_PROFILE=maestria terraform output -raw redis_endpoint)
+HOTEL_SYNC_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sqs_hotel_sync_queue_url)
+SNS_TOPIC_ARN=$(AWS_PROFILE=maestria terraform output -raw sns_topic_arn)
+PAYMENT_BOOKING_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sns_payment_booking_queue_url)
+NOTIFICATION_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sns_notification_queue_url)
+
+# Obtener contraseña de DB
+DB_PASSWORD=$(AWS_PROFILE=maestria aws secretsmanager get-secret-value \
+  --secret-id proyecto-final-dev-db-password --region us-east-1 \
+  --query SecretString --output text)
+
+# Construir URLs
+DB_HOST=$(echo "$DB_ENDPOINT" | cut -d: -f1)
+DB_PORT=$(echo "$DB_ENDPOINT" | cut -d: -f2)
+DATABASE_URL="postgresql+asyncpg://dbadmin:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+REDIS_URL="redis://${REDIS_ENDPOINT}:6379"
+
+# Secrets (database-url por servicio)
+for SVC in auth-service inventory-service cart-service payment-service booking-service; do
+    AWS_PROFILE=maestria kubectl create secret generic ${SVC}-secrets \
+      --from-literal=database-url="$DATABASE_URL" \
+      --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+done
+
+# Notification service necesita expo-access-token adicional
+AWS_PROFILE=maestria kubectl create secret generic notification-service-secrets \
+  --from-literal=database-url="$DATABASE_URL" \
+  --from-literal=expo-access-token="<tu-expo-token>" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+# ConfigMaps por servicio
+AWS_PROFILE=maestria kubectl create configmap cart-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+AWS_PROFILE=maestria kubectl create configmap notification-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+AWS_PROFILE=maestria kubectl create configmap inventory-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+AWS_PROFILE=maestria kubectl create configmap search-service-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+# Shared ConfigMaps (usados por múltiples servicios)
+AWS_PROFILE=maestria kubectl create configmap shared-infra-config \
+  --from-literal=redis-url="$REDIS_URL" \
+  --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
+  --from-literal=sns-topic-arn="$SNS_TOPIC_ARN" \
+  --from-literal=payment-booking-queue-url="$PAYMENT_BOOKING_QUEUE_URL" \
+  --from-literal=notification-queue-url="$NOTIFICATION_QUEUE_URL" \
+  --from-literal=aws-region="us-east-1" \
+  --from-literal=aws-endpoint-url="" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+
+AWS_PROFILE=maestria kubectl create configmap shared-service-discovery \
+  --from-literal=inventory-service-url="http://inventory-service:80" \
+  --from-literal=booking-service-url="http://booking-service:80" \
+  --from-literal=cart-service-url="http://cart-service:80" \
+  --from-literal=search-service-url="http://search-service:80" \
+  --from-literal=notification-service-url="http://notification-service:80" \
+  --from-literal=auth-service-url="http://auth-service:80" \
+  --from-literal=payment-service-url="http://payment-service:80" \
+  --from-literal=reports-service-url="http://reports-service:80" \
+  --from-literal=commercial-service-url="http://commercial-service:80" \
+  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+```
+
+### Paso 5: Construir y subir imágenes Docker
+
+> **Mac ARM (M1/M2)**: Las imágenes deben compilarse con `--platform linux/amd64` para EKS.
+
+```bash
+cd ../..  # volver a la raíz del proyecto
+
+AWS_ACCOUNT_ID="<tu-account-id>"
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
+
+# Login a ECR
+AWS_PROFILE=maestria aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin $ECR_REGISTRY
+
+# Build y push todos los servicios
+SERVICES=("gateway-service" "auth-service" "inventory-service" "search-service" \
+  "cart-service" "notification-service" "health-copilot" "payment-service" "booking-service")
+
+for SERVICE in "${SERVICES[@]}"; do
+    if [ "$SERVICE" = "health-copilot" ]; then
+        SERVICE_DIR="services/health_copilot"
+    else
+        SERVICE_DIR="services/${SERVICE//-/_}"
+    fi
+
+    echo "Building $SERVICE..."
+    docker build --platform linux/amd64 \
+      -t $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest $SERVICE_DIR
+    docker push $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest
+done
+```
+
+> Si `notification-service` falla con poetry lock error, regenerar:
+> ```bash
+> cd services/notification_service && rm poetry.lock && poetry lock --no-update && cd ../..
+> ```
+> Lo mismo aplica para `auth-service` si falla por `bcrypt` constraint.
+
+### Paso 6: Instalar NGINX Ingress Controller
+
+```bash
+AWS_PROFILE=maestria kubectl apply -f \
+  https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/aws/deploy.yaml
+
+# Esperar a que esté listo (~1-2 min)
+AWS_PROFILE=maestria kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+### Paso 7: Desplegar servicios
+
+```bash
+# Aplicar todos los deployments
+AWS_PROFILE=maestria kubectl apply -f kubernetes/deployments/
+
+# Aplicar ingress
+AWS_PROFILE=maestria kubectl apply -f kubernetes/ingress.yaml
+```
+
+### Paso 8: Verificar
+
+```bash
+AWS_PROFILE=maestria kubectl get pods          # todos deben estar Running
+AWS_PROFILE=maestria kubectl get ingress       # ver URL del Load Balancer
+
+# Obtener URL del LB
+LB_URL=$(AWS_PROFILE=maestria kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "API: http://$LB_URL"
+
+# Test rápido
+curl http://$LB_URL/health
+curl http://$LB_URL/api/v1/search/destinations
 ```
 
 ---
 
 ## Servicios desplegados
 
-| Servicio | Puerto | Health Check | Secret/ConfigMap |
-|----------|--------|-------------|-----------------|
-| auth-service | 8000 | /health | `auth-service-secrets` |
-| inventory-service | 8000 | /health | `inventory-service-secrets`, `inventory-service-config` |
-| search-service | 8000 | /health | `search-service-config` |
-| search-worker | — | — | `search-service-config` |
-| cart-service | 8000 | /health | `cart-service-config` |
-| notification-service | 8000 | /health | `notification-service-config` |
-| health-copilot | 8000 | /health | — |
+| Servicio | Puerto | Descripción | Secrets/ConfigMaps |
+|----------|--------|-------------|-------------------|
+| gateway-service | 8000 | API Gateway — auth + proxy | — (env vars para service URLs) |
+| auth-service | 8000 | Autenticación JWT | `auth-service-secrets` |
+| inventory-service | 8000 | Hoteles, habitaciones, holds | `inventory-service-secrets`, `inventory-service-config`, `shared-infra-config` |
+| search-service | 8000 | Búsqueda de hoteles | `search-service-config`, `shared-infra-config` |
+| search-worker | — | Worker SQS para sync | `search-service-config`, `shared-infra-config` |
+| cart-service | 8000 | Carrito de compras | `cart-service-secrets`, `cart-service-config`, `shared-infra-config` |
+| booking-service | 8000 | Reservas | `booking-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
+| booking-worker | — | Worker SQS para pagos | `booking-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
+| payment-service | 8000 | Procesamiento de pagos | `payment-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
+| notification-service | 8000 | Push notifications | `notification-service-secrets`, `notification-service-config`, `shared-infra-config` |
+| health-copilot | 8000 | Monitor de salud | — |
 
-> **Nota**: `t3.small` tiene ~1.4GB RAM disponible. Todos los pods usan `requests: 64Mi`.
-> Si se necesitan más servicios (booking, commercial, payment, reports),
-> cambiar `node_instance_types` a `["t3.medium"]` en `infrastructure/terraform/variables.tf`
-> y ejecutar `terraform apply`.
+### Routing
+
+El **Ingress** enruta todo `/api/v1/*` al `gateway-service`. El gateway resuelve internamente:
+
+| Ruta | Autenticación | Servicio destino |
+|------|--------------|-----------------|
+| `/api/v1/auth/*` | Pública | auth-service |
+| `/api/v1/search/*` | Pública | search-service |
+| `/api/v1/inventory/*` | Pública (holds requieren auth) | inventory-service |
+| `/api/v1/bookings` | Traveler (Bearer token) | booking-service |
+| `/api/v1/bookings/hotel/*` | Hotel Admin (Bearer + hotel resolution) | booking-service |
+| `/api/v1/cart/*` | Traveler | cart-service |
+| `/api/v1/payments/*` | Mixta (initiate requiere auth) | payment-service |
+| `/api/v1/reports/*` | Hotel Admin | reports-service |
+| `/api/v1/notifications/*` | Traveler | notification-service |
+
+> **Nota**: `t3.small` tiene ~1.4GB RAM. Con 11 pods usando `requests: 64Mi` y 2 nodos, hay suficiente capacidad.
 
 ---
 
 ## Actualizar después de cambios en código
 
-Si solo cambiaste código de un servicio (sin cambios en infraestructura):
-
 ```bash
-# Opción 1: Re-ejecutar todo
-./deploy.sh
+AWS_ACCOUNT_ID="<tu-account-id>"
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 
-# Opción 2: Actualizar un solo servicio
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 618246140762.dkr.ecr.us-east-1.amazonaws.com
+# Login a ECR
+AWS_PROFILE=maestria aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin $ECR_REGISTRY
 
-docker build -t 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-<servicio>:latest services/<servicio_dir>/
-docker push 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-<servicio>:latest
+# Build, push y restart un servicio
+SERVICE="gateway-service"  # cambiar según necesidad
+SERVICE_DIR="services/${SERVICE//-/_}"
 
-kubectl rollout restart deployment/<servicio>
+docker build --platform linux/amd64 \
+  -t $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest $SERVICE_DIR
+docker push $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest
+AWS_PROFILE=maestria kubectl rollout restart deployment/${SERVICE}
 ```
 
-Mapeo de nombres (nombre-servicio → directorio):
-- `auth-service` → `services/auth_service/`
-- `inventory-service` → `services/inventory_service/`
-- `search-service` → `services/search_service/`
-- `cart-service` → `services/cart_service/`
-- `notification-service` → `services/notification_service/`
-- `health-copilot` → `services/health_copilot/`
+Mapeo de nombres (servicio → directorio):
+| Servicio | Directorio |
+|----------|-----------|
+| gateway-service | `services/gateway_service/` |
+| auth-service | `services/auth_service/` |
+| booking-service | `services/booking_service/` |
+| inventory-service | `services/inventory_service/` |
+| search-service | `services/search_service/` |
+| cart-service | `services/cart_service/` |
+| payment-service | `services/payment_service/` |
+| notification-service | `services/notification_service/` |
+| health-copilot | `services/health_copilot/` |
 
 ---
 
 ## Destruir TODO (evitar cargos)
 
 ```bash
-# 1. Eliminar recursos de Kubernetes primero (libera el Load Balancer)
-kubectl delete -f kubernetes/ingress.yaml 2>/dev/null
-kubectl delete -f kubernetes/deployments/ 2>/dev/null
+# 1. Eliminar recursos de Kubernetes (libera el Load Balancer)
+AWS_PROFILE=maestria kubectl delete -f kubernetes/ingress.yaml 2>/dev/null
+AWS_PROFILE=maestria kubectl delete -f kubernetes/deployments/ 2>/dev/null
 
 # 2. Destruir infraestructura
 cd infrastructure/terraform
-terraform destroy
+AWS_PROFILE=maestria terraform destroy -var-file=terraform.tfvars
 # Escribir "yes" cuando pregunte
 ```
 
 > Tarda ~15-20 minutos. **No interrumpir.**
-> Si falla por timeout de red, ejecutar `terraform destroy` de nuevo.
+> Si falla por timeout: re-ejecutar `terraform destroy`.
 > Si queda un lock: `terraform force-unlock <LOCK-ID>`
-> Si el Secrets Manager secret queda pendiente de eliminación:
-> `aws secretsmanager delete-secret --secret-id proyecto-final-dev-db-password --region us-east-1 --force-delete-without-recovery`
-
----
-
-## Autenticación temporal (pre-auth service)
-
-Mientras el servicio de autenticación no emita tokens reales, el Ingress inyecta headers
-por defecto para que los servicios que requieren `X-User-Id` y `X-Hotel-Id` funcionen:
-
-```yaml
-# kubernetes/ingress.yaml — annotation configuration-snippet
-proxy_set_header X-User-Id "c1000000-0000-0000-0000-000000000001";
-proxy_set_header X-Hotel-Id "a1000000-0000-0000-0000-000000000001";
-```
-
-Estos valores corresponden al usuario y hotel seedeados por defecto.
-
-> **⚠️ TODO**: Cuando el auth service esté en producción, eliminar la annotation
-> `nginx.ingress.kubernetes.io/configuration-snippet` del Ingress y hacer que los
-> clientes (web/mobile) envíen el token JWT en el header `Authorization`. El servicio
-> de autenticación debe extraer el `user_id` del token y propagarlo como `X-User-Id`.
-
-**Servicios afectados sin este header**:
-- `cart-service` — retorna 401 sin `X-User-Id`
-- `booking-service` — retorna 401 sin `X-User-Id`
+> Si el secret queda pendiente:
+> `aws secretsmanager delete-secret --secret-id proyecto-final-dev-db-password --region us-east-1 --force-delete-without-recovery --profile maestria`
 
 ---
 
@@ -181,13 +353,16 @@ Estos valores corresponden al usuario y hotel seedeados por defecto.
 
 | Problema | Solución |
 |----------|----------|
-| Cart/Booking retorna 401 | Verificar que el Ingress tiene la annotation `configuration-snippet` con `proxy_set_header X-User-Id`. Aplicar con `kubectl apply -f kubernetes/ingress.yaml` |
-| `terraform destroy/apply` falla por lock | `terraform force-unlock <LOCK-ID>` |
-| Error DNS durante terraform | Verificar conexión a internet, reintentar |
-| Secret "scheduled for deletion" | `aws secretsmanager delete-secret --secret-id <id> --region us-east-1 --force-delete-without-recovery` |
-| kubectl 401 Unauthorized | Verificar que kubeconfig usa `aws-iam-authenticator`, no `aws`. Re-ejecutar `./deploy.sh` |
-| `aws.exe` PyInstaller error en kubectl | Instalar `aws-iam-authenticator.exe` en `~/bin/`. El deploy.sh lo usa automáticamente |
-| Pods en Pending (Insufficient memory) | Reducir `resources.requests` en YAMLs o cambiar a `t3.medium` |
-| ImagePullBackOff | Verificar que la imagen fue construida y subida con `docker push`. Nombre ECR: `proyecto-final-dev-<servicio>` (con guión, no slash) |
-| CreateContainerConfigError | Falta Secret o ConfigMap. Verificar con `kubectl describe pod <pod>` y crear los que falten |
-| Pods en CrashLoopBackOff | Ver logs: `kubectl logs <pod-name>`. Puede ser error de dependencias en el código |
+| `terraform apply` falla en EKS Access Entry (409) | `terraform import 'module.eks.aws_eks_access_entry.admin' 'proyecto-final-dev:arn:aws:iam::<ACCOUNT_ID>:root'` y re-ejecutar |
+| ElastiCache `InvalidCredentialsException` | Transitorio — re-ejecutar `terraform apply` |
+| `terraform apply/destroy` falla por lock | `terraform force-unlock <LOCK-ID>` |
+| Poetry lock incompatible en Docker build | `cd services/<servicio> && rm poetry.lock && poetry lock --no-update` |
+| `InvalidImageName` en pods | Verificar que el YAML tiene la URL completa de ECR, no `${ECR_REGISTRY}` |
+| `CreateContainerConfigError` | Falta Secret o ConfigMap. Verificar con `kubectl describe pod <pod>` |
+| `ImagePullBackOff` | Verificar `docker push` exitoso. Nombre ECR: `proyecto-final-dev-<servicio>` |
+| Pods en CrashLoopBackOff | `kubectl logs <pod>`. Puede ser DB migration o dependencia faltante |
+| kubectl 401 Unauthorized | `aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1 --profile maestria` |
+| Cart/Booking 401 desde cliente | Verificar que el cliente envía `Authorization: Bearer <token>`. Gateway valida el token via auth-service |
+| Hotel admin endpoints 403 | Verificar que el usuario tiene `role: hotel_admin` y está asociado a un hotel en inventory (`Hotel.admin_id`) |
+| Mac ARM: pods crash en EKS | Asegurar `--platform linux/amd64` en `docker build` |
+| Secret "scheduled for deletion" | `aws secretsmanager delete-secret --secret-id <id> --region us-east-1 --force-delete-without-recovery --profile maestria` |

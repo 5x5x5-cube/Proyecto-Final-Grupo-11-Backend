@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-service
+  labels:
+    app: gateway-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-service
+  template:
+    metadata:
+      labels:
+        app: gateway-service
+    spec:
+      containers:
+      - name: gateway-service
+        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-gateway-service:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service"
+        - name: BOOKING_SERVICE_URL
+          value: "http://booking-service"
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service"
+        - name: SEARCH_SERVICE_URL
+          value: "http://search-service"
+        - name: CART_SERVICE_URL
+          value: "http://cart-service"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service"
+        - name: REPORTS_SERVICE_URL
+          value: "http://reports-service"
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service"
+        - name: MONITOR_SERVICE_URL
+          value: "http://health-copilot"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "130m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-service
+spec:
+  selector:
+    app: gateway-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
