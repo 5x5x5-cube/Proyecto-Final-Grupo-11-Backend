@@ -86,7 +86,7 @@ class SQSConsumer:
                 try:
                     async with httpx.AsyncClient(timeout=10) as client:
                         resp = await client.put(
-                            f"{settings.inventory_service_url}/holds/{hold_id}/confirm"
+                            f"{settings.inventory_service_url}/api/v1/inventory/holds/{hold_id}/confirm"
                         )
                         resp.raise_for_status()
                         logger.info("Hold %s confirmed in inventory", hold_id)

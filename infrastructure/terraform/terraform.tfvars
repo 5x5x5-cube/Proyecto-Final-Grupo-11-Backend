@@ -21,7 +21,8 @@ ecr_repositories = [
   "commercial-service",
   "notification-service",
   "payment-service",
-  "health-copilot"
+  "health-copilot",
+  "gateway-service"
 ]
 
 redis_node_type = "cache.t3.micro"

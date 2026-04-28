@@ -18,7 +18,7 @@ async def create_hold(
     """POST /holds — create a hold on a room for the given dates."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
         response = await client.post(
-            "/holds",
+            "/api/v1/inventory/holds",
             headers={"X-User-Id": str(user_id)},
             json={
                 "roomId": str(room_id),
@@ -41,7 +41,7 @@ async def create_hold(
 async def release_hold(hold_id: uuid.UUID) -> None:
     """DELETE /holds/{hold_id} — release an existing hold."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
-        response = await client.delete(f"/holds/{hold_id}")
+        response = await client.delete(f"/api/v1/inventory/holds/{hold_id}")
     if response.status_code in (204, 404):
         return
     raise InventoryServiceError(
@@ -52,7 +52,7 @@ async def release_hold(hold_id: uuid.UUID) -> None:
 async def get_hold(hold_id: uuid.UUID) -> dict:
     """GET /holds/{hold_id} — retrieve hold details."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
-        response = await client.get(f"/holds/{hold_id}")
+        response = await client.get(f"/api/v1/inventory/holds/{hold_id}")
     if response.status_code == 200:
         return response.json()
     if response.status_code == 404:
@@ -65,7 +65,7 @@ async def get_hold(hold_id: uuid.UUID) -> dict:
 async def get_room(room_id: uuid.UUID) -> dict:
     """GET /rooms/{room_id} — retrieve room details."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
-        response = await client.get(f"/rooms/{room_id}")
+        response = await client.get(f"/api/v1/inventory/rooms/{room_id}")
     if response.status_code == 200:
         return response.json()
     if response.status_code == 404:
@@ -78,7 +78,7 @@ async def get_room(room_id: uuid.UUID) -> dict:
 async def get_room_hotel(room_id: uuid.UUID) -> dict:
     """GET /rooms/{room_id}/hotel — retrieve hotel details for a room."""
     async with httpx.AsyncClient(base_url=settings.inventory_service_url) as client:
-        response = await client.get(f"/rooms/{room_id}/hotel")
+        response = await client.get(f"/api/v1/inventory/rooms/{room_id}/hotel")
     if response.status_code == 200:
         return response.json()
     if response.status_code == 404:

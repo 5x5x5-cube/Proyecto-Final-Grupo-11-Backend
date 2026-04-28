@@ -29,9 +29,12 @@ class TestRouteConfig:
         assert get_auth_mode("POST", "/api/v1/inventory/holds") == AuthMode.TRAVELER
         assert get_auth_mode("GET", "/api/v1/inventory/holds/check/room-123") == AuthMode.TRAVELER
 
-    def test_inventory_tariffs_admin_is_hotel_admin(self):
+    def test_inventory_tariffs_are_hotel_admin(self):
         assert get_auth_mode("GET", "/api/v1/inventory/tariffs/admin/rooms") == AuthMode.HOTEL_ADMIN
         assert get_auth_mode("GET", "/api/v1/inventory/tariffs") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("POST", "/api/v1/inventory/tariffs") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("PUT", "/api/v1/inventory/tariffs/t-1") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("DELETE", "/api/v1/inventory/tariffs/t-1") == AuthMode.HOTEL_ADMIN
 
     def test_booking_list_and_create_are_traveler(self):
         assert get_auth_mode("GET", "/api/v1/bookings") == AuthMode.TRAVELER
@@ -60,6 +63,15 @@ class TestRouteConfig:
 
     def test_notifications_are_traveler(self):
         assert get_auth_mode("GET", "/api/v1/notifications/history") == AuthMode.TRAVELER
+
+    def test_reports_are_hotel_admin(self):
+        assert get_auth_mode("GET", "/api/v1/reports/dashboard") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("GET", "/api/v1/reports/kpis") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("GET", "/api/v1/reports/revenue") == AuthMode.HOTEL_ADMIN
+        assert get_auth_mode("GET", "/api/v1/reports/transactions") == AuthMode.HOTEL_ADMIN
+
+    def test_bookings_discounts_are_hotel_admin(self):
+        assert get_auth_mode("GET", "/api/v1/bookings/discounts") == AuthMode.HOTEL_ADMIN
 
     def test_unknown_route_defaults_to_traveler(self):
         assert get_auth_mode("GET", "/api/v1/unknown/stuff") == AuthMode.TRAVELER
