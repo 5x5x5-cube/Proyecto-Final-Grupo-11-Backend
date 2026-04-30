@@ -87,5 +87,21 @@ class SNSPublisher:
             },
         )
 
+    async def publish_booking_created(
+        self,
+        booking_id: str,
+        user_id: str,
+        payment_id: str,
+    ) -> bool:
+        return await self.publish_event(
+            event_type="booking_created",
+            entity_type="booking",
+            entity_data={
+                "id": booking_id,
+                "user_id": user_id,
+                "payment_id": payment_id,
+            },
+        )
+
 
 sns_publisher = SNSPublisher()

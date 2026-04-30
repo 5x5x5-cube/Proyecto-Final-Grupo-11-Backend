@@ -40,6 +40,7 @@ class Booking(Base):
     service_fee: Mapped[float] = mapped_column(DECIMAL(10, 2), default=0)
     total_price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="COP")
+    locale: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

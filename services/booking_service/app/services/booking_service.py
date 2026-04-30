@@ -88,6 +88,9 @@ def build_booking_response(
         checkOut=booking.check_out,
         guests=booking.guests,
         status=booking.status,
+        basePrice=float(booking.base_price),
+        taxAmount=float(booking.tax_amount),
+        serviceFee=float(booking.service_fee),
         totalPrice=float(booking.total_price),
         currency=booking.currency,
         priceBreakdown=price_breakdown,
@@ -97,6 +100,7 @@ def build_booking_response(
         guestEmail=booking.guest_email,
         guestPhone=booking.guest_phone,
         nights=max((booking.check_out - booking.check_in).days, 1),
+        locale=booking.locale,
         timeline=_build_timeline(booking),
     )
 
@@ -127,6 +131,7 @@ async def create_booking(
         guest_name=request.guest_name,
         guest_email=request.guest_email,
         guest_phone=request.guest_phone,
+        locale=request.locale,
     )
     db.add(booking)
     await db.commit()

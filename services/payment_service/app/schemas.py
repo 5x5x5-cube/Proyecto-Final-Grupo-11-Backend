@@ -182,6 +182,7 @@ class BookingData(BaseModel):
     tax_amount: str = Field(..., alias="taxAmount")
     service_fee: str = Field("0", alias="serviceFee")
     total_price: str = Field(..., alias="totalPrice")
+    locale: str | None = Field(None)
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 

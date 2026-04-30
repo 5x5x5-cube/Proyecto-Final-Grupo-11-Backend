@@ -255,6 +255,18 @@ curl http://$LB_URL/health
 curl http://$LB_URL/api/v1/search/destinations
 ```
 
+### Paso 9: Acceder a Mailpit (visor de emails)
+
+Mailpit captura todos los emails enviados por el notification-service sin entregarlos a buzones reales. Para acceder a la UI web:
+
+```bash
+AWS_PROFILE=maestria kubectl port-forward svc/mailpit 8025:8025
+```
+
+Luego abrir http://localhost:8025 en el navegador. Ahi se pueden ver todos los emails de confirmacion de pago enviados.
+
+> **Nota**: Mailpit es un servidor SMTP mock para desarrollo/staging. No entrega emails reales. Para produccion, reemplazar por AWS SES actualizando las variables `SMTP_HOST`, `SMTP_PORT`, `SMTP_USE_TLS`, `SMTP_USERNAME` y `SMTP_PASSWORD` en el deployment del notification-service.
+
 ---
 
 ## Servicios desplegados
@@ -270,7 +282,8 @@ curl http://$LB_URL/api/v1/search/destinations
 | booking-service | 8000 | Reservas | `booking-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
 | booking-worker | — | Worker SQS para pagos | `booking-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
 | payment-service | 8000 | Procesamiento de pagos | `payment-service-secrets`, `shared-infra-config`, `shared-service-discovery` |
-| notification-service | 8000 | Push notifications | `notification-service-secrets`, `notification-service-config`, `shared-infra-config` |
+| notification-service | 8000 | Push + email notifications | `notification-service-secrets`, `shared-infra-config` |
+| mailpit | 1025/8025 | Captura de emails (SMTP mock) | — |
 | health-copilot | 8000 | Monitor de salud | — |
 
 ### Routing
