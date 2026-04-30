@@ -58,6 +58,20 @@ spec:
             secretKeyRef:
               name: notification-service-secrets
               key: expo-access-token
+        - name: SMTP_HOST
+          value: "mailpit"
+        - name: SMTP_PORT
+          value: "1025"
+        - name: SMTP_FROM_EMAIL
+          value: "noreply@travelhub.com"
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service"
+        - name: BOOKING_SERVICE_URL
+          value: "http://booking-service"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service"
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service"
         livenessProbe:
           httpGet:
             path: /health

@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     expo_access_token: Optional[str] = None
     expo_push_url: str = "https://exp.host/--/api/v2/push/send"
 
+    # SMTP settings for email notifications
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = False
+    smtp_from_email: str = "noreply@travelhub.com"
+    smtp_from_name: str = "TravelHub"
+
+    # Service URLs for data enrichment
+    auth_service_url: str = "http://localhost:8011"
+    booking_service_url: str = "http://localhost:8002"
+    payment_service_url: str = "http://localhost:8009"
+    inventory_service_url: str = "http://localhost:8006"
+
     model_config = SettingsConfigDict(env_file=".env")
 
 
