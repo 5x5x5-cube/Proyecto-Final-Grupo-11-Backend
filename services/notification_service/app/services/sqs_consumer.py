@@ -195,9 +195,9 @@ class SQSConsumer:
                 "check_in": booking_info.get("checkIn", ""),
                 "check_out": booking_info.get("checkOut", ""),
                 "guests": booking_info.get("guests", 0),
-                "base_price": str(booking_info.get("totalPrice", 0)),
-                "tax_amount": "0",
-                "service_fee": "0",
+                "base_price": str(booking_info.get("basePrice", 0)),
+                "tax_amount": str(booking_info.get("taxAmount", 0)),
+                "service_fee": str(booking_info.get("serviceFee", 0)),
                 "total_price": str(booking_info.get("totalPrice", 0)),
                 "currency": booking_info.get("currency", "COP"),
                 "payment_method_display": pm_display,
@@ -205,16 +205,9 @@ class SQSConsumer:
                 "user_name": user_name,
             }
 
-            # Use price breakdown if available
-            price_breakdown = booking_info.get("priceBreakdown")
-            if price_breakdown:
-                email_data["base_price"] = str(price_breakdown.get("basePrice", 0))
-                email_data["tax_amount"] = str(price_breakdown.get("vat", 0))
-                email_data["service_fee"] = str(price_breakdown.get("serviceFee", 0))
-                email_data["total_price"] = str(price_breakdown.get("totalPrice", 0))
-
             booking_code = email_data["booking_code"]
-            email_content = build_payment_confirmation_email(email_data)
+            locale = booking_info.get("locale") or "es"
+            email_content = build_payment_confirmation_email(email_data, locale=locale)
 
             # Send email
             delivered = await email_service.send_email(

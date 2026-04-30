@@ -47,6 +47,7 @@ async def initiate_payment(
     db: AsyncSession,
     user_id: uuid.UUID,
     request: InitiatePaymentRequest,
+    locale: str = "es",
 ) -> PaymentResponse:
     """Validate token/cart, save payment method, create payment, fire gateway."""
     # 1. Validate token with the gateway (simulated: query PaymentToken)
@@ -95,6 +96,7 @@ async def initiate_payment(
         "taxAmount": str(cart.price_breakdown.vat),
         "serviceFee": str(cart.price_breakdown.service_fee),
         "totalPrice": str(cart.price_breakdown.total),
+        "locale": locale,
     }
 
     payment = Payment(

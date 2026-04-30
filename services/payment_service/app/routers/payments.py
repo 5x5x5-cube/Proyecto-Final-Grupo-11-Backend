@@ -38,6 +38,7 @@ def get_user_id(request: Request) -> uuid.UUID:
 @router.post("/initiate", response_model=PaymentResponse, status_code=202)
 async def initiate_payment_endpoint(
     request: InitiatePaymentRequest,
+    raw_request: Request,
     user_id: uuid.UUID = Depends(get_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -45,8 +46,10 @@ async def initiate_payment_endpoint(
 
     Returns 202 immediately; client polls GET /{id} for result.
     """
+    accept_lang = raw_request.headers.get("accept-language", "es")
+    locale = "en" if accept_lang.startswith("en") else "es"
     try:
-        return await initiate_payment(db=db, user_id=user_id, request=request)
+        return await initiate_payment(db=db, user_id=user_id, request=request, locale=locale)
     except InvalidTokenError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except TokenExpiredError as exc:

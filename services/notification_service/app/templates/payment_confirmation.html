@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ lang }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Confirmacion de Reserva - TravelHub</title>
+  <title>{{ t("payment_confirmed") }} - TravelHub</title>
   <!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important;}</style><![endif]-->
   <style>
     @media only screen and (max-width: 620px) {
@@ -40,8 +40,8 @@
                   </td>
                 </tr>
               </table>
-              <h2 style="margin:16px 0 0;color:#1A6B4F;font-size:20px;font-weight:700;">Pago confirmado</h2>
-              <p style="margin:8px 0 0;color:#3F4E51;font-size:14px;font-weight:400;">Tu reserva ha sido registrada exitosamente.</p>
+              <h2 style="margin:16px 0 0;color:#1A6B4F;font-size:20px;font-weight:700;">{{ t("payment_confirmed") }}</h2>
+              <p style="margin:8px 0 0;color:#3F4E51;font-size:14px;font-weight:400;">{{ t("booking_registered") }}</p>
             </td>
           </tr>
 
@@ -51,7 +51,7 @@
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;background-color:#9EEFFD;border-radius:12px;">
                 <tr>
                   <td style="padding:16px 36px;">
-                    <p style="margin:0;color:#3F4E51;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Codigo de reserva</p>
+                    <p style="margin:0;color:#3F4E51;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">{{ t("booking_code_label") }}</p>
                     <p style="margin:6px 0 0;color:#006874;font-size:28px;font-weight:700;letter-spacing:2px;" class="booking-code">{{ booking_code }}</p>
                   </td>
                 </tr>
@@ -65,33 +65,33 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #BEC8CA;border-radius:16px;overflow:hidden;">
                 <tr>
                   <td style="padding:20px 24px 12px;">
-                    <h3 style="margin:0;color:#171D1E;font-size:16px;font-weight:600;border-bottom:1px solid #DBE4E6;padding-bottom:12px;">Detalles de la reserva</h3>
+                    <h3 style="margin:0;color:#171D1E;font-size:16px;font-weight:600;border-bottom:1px solid #DBE4E6;padding-bottom:12px;">{{ t("booking_details") }}</h3>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:0 24px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;width:40%;">Hotel</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;width:40%;">{{ t("hotel") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:600;">{{ hotel_name }}</td>
                       </tr>
                       {% if room_name %}
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Habitacion</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("room") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;border-top:1px solid #DBE4E6;">{{ room_name }}</td>
                       </tr>
                       {% endif %}
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Check-in</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("check_in") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;border-top:1px solid #DBE4E6;">{{ check_in }}</td>
                       </tr>
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Check-out</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("check_out") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;border-top:1px solid #DBE4E6;">{{ check_out }}</td>
                       </tr>
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Huespedes</td>
-                        <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;border-top:1px solid #DBE4E6;">{{ guests }}</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("guests") }}</td>
+                        <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;border-top:1px solid #DBE4E6;">{{ guests_count }}</td>
                       </tr>
                     </table>
                   </td>
@@ -107,39 +107,39 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #BEC8CA;border-radius:16px;overflow:hidden;">
                 <tr>
                   <td style="padding:20px 24px 12px;">
-                    <h3 style="margin:0;color:#171D1E;font-size:16px;font-weight:600;border-bottom:1px solid #DBE4E6;padding-bottom:12px;">Resumen de pago</h3>
+                    <h3 style="margin:0;color:#171D1E;font-size:16px;font-weight:600;border-bottom:1px solid #DBE4E6;padding-bottom:12px;">{{ t("payment_summary") }}</h3>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:0 24px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;">Subtotal</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;">{{ t("subtotal") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;text-align:right;">{{ base_price }}</td>
                       </tr>
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Impuestos</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("taxes") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;text-align:right;border-top:1px solid #DBE4E6;">{{ tax_amount }}</td>
                       </tr>
-                      {% if service_fee and service_fee != "$0" %}
+                      {% if has_service_fee %}
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Tarifa de servicio</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("service_fee") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;text-align:right;border-top:1px solid #DBE4E6;">{{ service_fee }}</td>
                       </tr>
                       {% endif %}
                       <tr>
-                        <td style="padding:14px 0;color:#171D1E;font-size:20px;font-weight:700;border-top:2px solid #BEC8CA;" class="total-label">Total pagado</td>
+                        <td style="padding:14px 0;color:#171D1E;font-size:20px;font-weight:700;border-top:2px solid #BEC8CA;" class="total-label">{{ t("total_paid") }}</td>
                         <td style="padding:14px 0;color:#006874;font-size:20px;font-weight:700;text-align:right;border-top:2px solid #BEC8CA;" class="total-value">{{ total_price }}</td>
                       </tr>
                       {% if payment_method_display %}
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">Metodo de pago</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:14px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("payment_method") }}</td>
                         <td style="padding:10px 0;color:#171D1E;font-size:14px;font-weight:500;text-align:right;border-top:1px solid #DBE4E6;">{{ payment_method_display }}</td>
                       </tr>
                       {% endif %}
                       {% if transaction_id %}
                       <tr>
-                        <td style="padding:10px 0;color:#3F4E51;font-size:13px;font-weight:400;border-top:1px solid #DBE4E6;">ID de transaccion</td>
+                        <td style="padding:10px 0;color:#3F4E51;font-size:13px;font-weight:400;border-top:1px solid #DBE4E6;">{{ t("transaction_id") }}</td>
                         <td style="padding:10px 0;color:#6F797A;font-size:13px;font-weight:400;text-align:right;border-top:1px solid #DBE4E6;word-break:break-all;">{{ transaction_id }}</td>
                       </tr>
                       {% endif %}
@@ -154,8 +154,8 @@
           <!-- Footer -->
           <tr>
             <td style="padding:24px 40px 28px;text-align:center;border-top:1px solid #DBE4E6;" class="section-pad">
-              <p style="margin:0;color:#3F4E51;font-size:13px;font-weight:400;">Si tienes alguna pregunta, contactanos en <a href="mailto:soporte@travelhub.com" style="color:#006874;font-weight:500;text-decoration:none;">soporte@travelhub.com</a></p>
-              <p style="margin:12px 0 0;color:#6F797A;font-size:12px;font-weight:400;">&copy; {{ current_year }} TravelHub. Todos los derechos reservados.</p>
+              <p style="margin:0;color:#3F4E51;font-size:13px;font-weight:400;">{{ t("contact_text") }} <a href="mailto:soporte@travelhub.com" style="color:#006874;font-weight:500;text-decoration:none;">soporte@travelhub.com</a></p>
+              <p style="margin:12px 0 0;color:#6F797A;font-size:12px;font-weight:400;">&copy; {{ current_year }} TravelHub. {{ t("rights_reserved") }}</p>
             </td>
           </tr>
 
