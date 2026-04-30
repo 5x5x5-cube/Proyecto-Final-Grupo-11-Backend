@@ -5,16 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Confirmacion de Reserva - TravelHub</title>
   <!--[if mso]><style>table,td{font-family:Arial,Helvetica,sans-serif!important;}</style><![endif]-->
+  <style>
+    @media only screen and (max-width: 620px) {
+      .email-container { width: 100% !important; }
+      .section-pad { padding-left: 20px !important; padding-right: 20px !important; }
+      .booking-code { font-size: 22px !important; }
+      .total-label, .total-value { font-size: 17px !important; }
+    }
+  </style>
 </head>
 <body style="margin:0;padding:0;background-color:#DDF3F7;font-family:'Roboto',Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#DDF3F7;">
     <tr>
       <td align="center" style="padding:32px 16px;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#FAFDFE;border-radius:16px;overflow:hidden;">
+        <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+        <table role="presentation" cellpadding="0" cellspacing="0" class="email-container" style="background-color:#FAFDFE;border-radius:16px;overflow:hidden;max-width:600px;width:100%;">
 
           <!-- Header -->
           <tr>
-            <td style="background-color:#006874;padding:28px 40px;text-align:center;">
+            <td style="background-color:#006874;padding:28px 40px;text-align:center;" class="section-pad">
               <h1 style="margin:0;font-size:22px;letter-spacing:-0.25px;color:#ffffff;">
                 <span style="font-weight:300;">Travel</span><span style="font-weight:800;">Hub</span>
               </h1>
@@ -23,7 +32,7 @@
 
           <!-- Success Banner -->
           <tr>
-            <td style="padding:32px 40px 8px;text-align:center;">
+            <td style="padding:32px 40px 8px;text-align:center;" class="section-pad">
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
                 <tr>
                   <td style="width:56px;height:56px;border-radius:100px;background-color:#C8F0DC;text-align:center;vertical-align:middle;">
@@ -38,12 +47,12 @@
 
           <!-- Booking Code -->
           <tr>
-            <td style="padding:16px 40px 28px;text-align:center;">
+            <td style="padding:16px 40px 28px;text-align:center;" class="section-pad">
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;background-color:#9EEFFD;border-radius:12px;">
                 <tr>
                   <td style="padding:16px 36px;">
                     <p style="margin:0;color:#3F4E51;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">Codigo de reserva</p>
-                    <p style="margin:6px 0 0;color:#006874;font-size:28px;font-weight:700;letter-spacing:2px;">{{ booking_code }}</p>
+                    <p style="margin:6px 0 0;color:#006874;font-size:28px;font-weight:700;letter-spacing:2px;" class="booking-code">{{ booking_code }}</p>
                   </td>
                 </tr>
               </table>
@@ -52,7 +61,7 @@
 
           <!-- Booking Details -->
           <tr>
-            <td style="padding:0 40px 20px;">
+            <td style="padding:0 40px 20px;" class="section-pad">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #BEC8CA;border-radius:16px;overflow:hidden;">
                 <tr>
                   <td style="padding:20px 24px 12px;">
@@ -94,7 +103,7 @@
 
           <!-- Payment Details -->
           <tr>
-            <td style="padding:0 40px 28px;">
+            <td style="padding:0 40px 28px;" class="section-pad">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #BEC8CA;border-radius:16px;overflow:hidden;">
                 <tr>
                   <td style="padding:20px 24px 12px;">
@@ -119,8 +128,8 @@
                       </tr>
                       {% endif %}
                       <tr>
-                        <td style="padding:14px 0;color:#171D1E;font-size:20px;font-weight:700;border-top:2px solid #BEC8CA;">Total pagado</td>
-                        <td style="padding:14px 0;color:#006874;font-size:20px;font-weight:700;text-align:right;border-top:2px solid #BEC8CA;">{{ total_price }}</td>
+                        <td style="padding:14px 0;color:#171D1E;font-size:20px;font-weight:700;border-top:2px solid #BEC8CA;" class="total-label">Total pagado</td>
+                        <td style="padding:14px 0;color:#006874;font-size:20px;font-weight:700;text-align:right;border-top:2px solid #BEC8CA;" class="total-value">{{ total_price }}</td>
                       </tr>
                       {% if payment_method_display %}
                       <tr>
@@ -131,7 +140,7 @@
                       {% if transaction_id %}
                       <tr>
                         <td style="padding:10px 0;color:#3F4E51;font-size:13px;font-weight:400;border-top:1px solid #DBE4E6;">ID de transaccion</td>
-                        <td style="padding:10px 0;color:#6F797A;font-size:13px;font-weight:400;text-align:right;border-top:1px solid #DBE4E6;">{{ transaction_id }}</td>
+                        <td style="padding:10px 0;color:#6F797A;font-size:13px;font-weight:400;text-align:right;border-top:1px solid #DBE4E6;word-break:break-all;">{{ transaction_id }}</td>
                       </tr>
                       {% endif %}
                     </table>
@@ -144,19 +153,14 @@
 
           <!-- Footer -->
           <tr>
-            <td style="padding:0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#E0F4F6;border-radius:0 0 16px 16px;">
-                <tr>
-                  <td style="padding:24px 40px;text-align:center;">
-                    <p style="margin:0;color:#3F4E51;font-size:13px;font-weight:400;">Si tienes alguna pregunta, contactanos en <a href="mailto:soporte@travelhub.com" style="color:#006874;font-weight:500;text-decoration:none;">soporte@travelhub.com</a></p>
-                    <p style="margin:12px 0 0;color:#6F797A;font-size:12px;font-weight:400;">&copy; {{ current_year }} TravelHub. Todos los derechos reservados.</p>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:24px 40px 28px;text-align:center;border-top:1px solid #DBE4E6;" class="section-pad">
+              <p style="margin:0;color:#3F4E51;font-size:13px;font-weight:400;">Si tienes alguna pregunta, contactanos en <a href="mailto:soporte@travelhub.com" style="color:#006874;font-weight:500;text-decoration:none;">soporte@travelhub.com</a></p>
+              <p style="margin:12px 0 0;color:#6F797A;font-size:12px;font-weight:400;">&copy; {{ current_year }} TravelHub. Todos los derechos reservados.</p>
             </td>
           </tr>
 
         </table>
+        <!--[if mso]></td></tr></table><![endif]-->
       </td>
     </tr>
   </table>
