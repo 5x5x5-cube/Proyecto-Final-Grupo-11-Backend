@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
-from ..models import Payment, PaymentToken, UserPaymentMethod
+from ..models import ExchangeRate, Payment, PaymentToken, UserPaymentMethod
 from ..schemas import (
     InitiatePaymentRequest,
     PaymentConfirmationWebhook,
@@ -81,10 +81,40 @@ async def initiate_payment(
     await db.flush()  # ensure FK is available before Payment insert
 
     # 4. Create Payment linked to the payment method
-    total_price = float(cart.price_breakdown.total)
-    currency = cart.price_breakdown.currency
+    cop_total = float(cart.price_breakdown.total)
+    cop_base = float(cart.price_breakdown.subtotal)
+    cop_tax = float(cart.price_breakdown.vat)
+    cop_fee = float(cart.price_breakdown.service_fee)
+    target_currency = request.currency.upper()
 
-    # Snapshot the booking data from the cart — needed later when the webhook fires
+    # Convert to target currency if different from COP
+    if target_currency != "COP":
+        rate_result = await db.execute(
+            select(ExchangeRate).where(ExchangeRate.currency == target_currency)
+        )
+        rate_row = rate_result.scalar_one_or_none()
+        if rate_row:
+            rate = float(rate_row.rate)
+            total_price = round(cop_total * rate, rate_row.decimals)
+            base_price = round(cop_base * rate, rate_row.decimals)
+            tax_amount = round(cop_tax * rate, rate_row.decimals)
+            service_fee = round(cop_fee * rate, rate_row.decimals)
+            currency = target_currency
+        else:
+            # Unknown currency — fall back to COP
+            total_price = cop_total
+            base_price = cop_base
+            tax_amount = cop_tax
+            service_fee = cop_fee
+            currency = "COP"
+    else:
+        total_price = cop_total
+        base_price = cop_base
+        tax_amount = cop_tax
+        service_fee = cop_fee
+        currency = "COP"
+
+    # Snapshot the booking data — in the target currency
     booking_snapshot = {
         "roomId": cart.room_id,
         "hotelId": cart.hotel_id,
@@ -92,10 +122,10 @@ async def initiate_payment(
         "checkIn": cart.check_in,
         "checkOut": cart.check_out,
         "guests": cart.guests,
-        "basePrice": str(cart.price_breakdown.subtotal),
-        "taxAmount": str(cart.price_breakdown.vat),
-        "serviceFee": str(cart.price_breakdown.service_fee),
-        "totalPrice": str(cart.price_breakdown.total),
+        "basePrice": str(base_price),
+        "taxAmount": str(tax_amount),
+        "serviceFee": str(service_fee),
+        "totalPrice": str(total_price),
         "locale": locale,
     }
 
