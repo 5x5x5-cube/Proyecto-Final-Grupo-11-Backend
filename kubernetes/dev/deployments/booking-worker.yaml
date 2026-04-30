@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booking-worker
+  labels:
+    app: booking-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-worker
+  template:
+    metadata:
+      labels:
+        app: booking-worker
+    spec:
+      containers:
+      - name: booking-worker
+        image: proyecto-final-grupo-11-backend-booking-worker:latest
+        imagePullPolicy: Never
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: booking-worker-secrets
+              key: database-url
+        - name: PAYMENT_BOOKING_QUEUE_URL
+          valueFrom:
+            secretKeyRef:
+              name: booking-worker-secrets
+              key: payment-booking-queue-url
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: booking-worker-secrets
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            secretKeyRef:
+              name: booking-worker-secrets
+              key: aws-endpoint-url
+        - name: AWS_ACCESS_KEY_ID
+          value: "test"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "test"

@@ -27,6 +27,9 @@ class SQSConsumer:
     def process_message(self, message_body: str) -> bool:
         try:
             event = json.loads(message_body)
+            # SNS wraps messages in a notification envelope — unwrap if present
+            if event.get("Type") == "Notification" and "Message" in event:
+                event = json.loads(event["Message"])
             event_type = event.get("event_type")
             entity_type = event.get("entity_type")
             data = event.get("data", {})
