@@ -74,6 +74,7 @@ class SQSConsumer:
                     serviceFee=booking_data.get("serviceFee", "0"),
                     totalPrice=booking_data.get("totalPrice"),
                     locale=booking_data.get("locale"),
+                    currency=payment.get("currency", "COP"),
                 )
 
                 booking_response = await create_booking(
