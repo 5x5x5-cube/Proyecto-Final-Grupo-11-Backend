@@ -51,9 +51,6 @@ def build_payment_confirmation_email(data: Dict[str, Any]) -> Dict[str, str]:
     data["service_fee"] = _format_currency(data.get("service_fee", 0), currency)
     data["total_price"] = _format_currency(data.get("total_price", 0), currency)
 
-    # Currency already embedded in formatted values
-    data["currency"] = ""
-
     html = template.render(**data)
     subject = f"Confirmacion de reserva {data.get('booking_code', '')} - TravelHub"
     return {"subject": subject, "html": html}
