@@ -199,7 +199,7 @@ class SQSConsumer:
                 "tax_amount": str(booking_info.get("taxAmount", 0)),
                 "service_fee": str(booking_info.get("serviceFee", 0)),
                 "total_price": str(booking_info.get("totalPrice", 0)),
-                "currency": booking_info.get("currency", "COP"),
+                "currency": payment_info.get("currency", "COP") if payment_info else "COP",
                 "payment_method_display": pm_display,
                 "transaction_id": payment_info.get("transactionId", "") if payment_info else "",
                 "user_name": user_name,
