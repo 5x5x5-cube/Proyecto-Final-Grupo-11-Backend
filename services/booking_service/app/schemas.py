@@ -21,6 +21,7 @@ class CreateBookingRequest(BaseModel):
     guest_email: str | None = Field(None, alias="guestEmail", max_length=254)
     guest_phone: str | None = Field(None, alias="guestPhone", max_length=30)
     locale: str | None = Field(None)
+    currency: str = Field("COP")
 
     model_config = ConfigDict(populate_by_name=True)
 

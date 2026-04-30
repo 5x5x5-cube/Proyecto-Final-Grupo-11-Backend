@@ -132,6 +132,7 @@ async def create_booking(
         guest_email=request.guest_email,
         guest_phone=request.guest_phone,
         locale=request.locale,
+        currency=request.currency,
     )
     db.add(booking)
     await db.commit()
