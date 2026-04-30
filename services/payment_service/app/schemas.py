@@ -130,6 +130,7 @@ class InitiatePaymentRequest(BaseModel):
     token: str
     cart_id: uuid.UUID = Field(..., alias="cartId")
     method: str = "credit_card"
+    currency: str = "COP"
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
