@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-service
+  labels:
+    app: gateway-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway-service
+  template:
+    metadata:
+      labels:
+        app: gateway-service
+    spec:
+      containers:
+      - name: gateway-service
+        image: proyecto-final-grupo-11-backend-gateway-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service"
+        - name: BOOKING_SERVICE_URL
+          value: "http://booking-service"
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service"
+        - name: SEARCH_SERVICE_URL
+          value: "http://search-service"
+        - name: CART_SERVICE_URL
+          value: "http://cart-service"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service"
+        - name: REPORTS_SERVICE_URL
+          value: "http://reports-service"
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service"
+        - name: MONITOR_SERVICE_URL
+          value: "http://health-copilot"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-service
+spec:
+  selector:
+    app: gateway-service
+  ports:
+  - port: 80
+    targetPort: 8000
+  type: NodePort
