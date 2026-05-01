@@ -1,7 +1,8 @@
 import uuid
 from datetime import date, datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .hotel import HotelBase, HotelCreate, HotelResponse  # noqa: F401
 
@@ -110,6 +111,51 @@ class TariffResponse(BaseModel):
     created_at: datetime
 
 
+# --- Discount schemas ---
+
+
+class DiscountCreate(BaseModel):
+    tariff_id: uuid.UUID
+    name: str = Field(..., min_length=1, max_length=100)
+    discount_type: str = Field(..., pattern="^(percentage|fixed)$")
+    value: float = Field(..., gt=0)
+    start_date: date
+    end_date: date
+
+    @field_validator("value")
+    @classmethod
+    def value_max_100_if_percentage(cls, v: float, info: Any) -> float:
+        if info.data.get("discount_type") == "percentage" and v > 100:
+            raise ValueError("Percentage discount cannot exceed 100")
+        return v
+
+    @model_validator(mode="after")
+    def end_after_start(self) -> "DiscountCreate":
+        if self.end_date <= self.start_date:
+            raise ValueError("end_date must be after start_date")
+        return self
+
+
+class DiscountUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=100)
+    discount_type: str | None = Field(None, pattern="^(percentage|fixed)$")
+    value: float | None = Field(None, gt=0)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
+class DiscountResponse(BaseModel):
+    id: uuid.UUID
+    tariff_id: uuid.UUID
+    name: str
+    discount_type: str
+    value: float
+    start_date: date
+    end_date: date
+    status: str
+    created_at: datetime
+
+
 # --- Admin room schemas ---
 
 
@@ -143,4 +189,7 @@ __all__ = [
     "TariffUpdate",
     "TariffResponse",
     "AdminRoomResponse",
+    "DiscountCreate",
+    "DiscountUpdate",
+    "DiscountResponse",
 ]
