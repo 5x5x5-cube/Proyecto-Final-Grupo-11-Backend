@@ -116,6 +116,28 @@ class Tariff(Base):
     )
 
     room: Mapped["Room"] = relationship(back_populates="tariffs")
+    discounts: Mapped[list["Discount"]] = relationship(
+        back_populates="tariff", cascade="all, delete-orphan"
+    )
 
 
-__all__ = ["Hotel", "Room", "Availability", "Hold", "Tariff", "Base"]
+class Discount(Base):
+    __tablename__ = "discounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tariff_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tariffs.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(20), nullable=False)  # percentage | fixed
+    value: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    tariff: Mapped["Tariff"] = relationship(back_populates="discounts")
+
+
+__all__ = ["Hotel", "Room", "Availability", "Hold", "Tariff", "Discount", "Base"]

@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .exceptions import HoldNotFoundError, RoomHeldError, RoomNotFoundError, RoomUnavailableError
 from .redis_client import close_redis
-from .routers import holds, hotels, rooms, tariffs
+from .routers import discounts, holds, hotels, rooms, tariffs
 from .tasks.cleanup import cleanup_expired_holds_loop
 
 
@@ -42,6 +42,7 @@ app.include_router(hotels.router, prefix="/api/v1/inventory")
 app.include_router(rooms.router, prefix="/api/v1/inventory")
 app.include_router(holds.router, prefix="/api/v1/inventory")
 app.include_router(tariffs.router, prefix="/api/v1/inventory")
+app.include_router(discounts.router, prefix="/api/v1/inventory")
 
 
 # --- Exception handlers ---
