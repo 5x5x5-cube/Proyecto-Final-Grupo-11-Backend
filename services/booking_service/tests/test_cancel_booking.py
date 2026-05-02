@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -50,17 +50,9 @@ def _make_booking(
 def _mock_db(booking: Booking | None = None):
     """Create a mock database session."""
     mock_db = AsyncMock()
-
-    # Configure execute to return a mock result
-    mock_result = AsyncMock()
-    mock_result.scalar_one_or_none = AsyncMock(return_value=booking)
-    mock_result.scalars = AsyncMock(return_value=AsyncMock(all=AsyncMock(return_value=[])))
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = booking
     mock_db.execute = AsyncMock(return_value=mock_result)
-
-    # Configure commit and refresh
-    mock_db.commit = AsyncMock()
-    mock_db.refresh = AsyncMock()
-
     return mock_db
 
 

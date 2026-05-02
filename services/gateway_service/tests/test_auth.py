@@ -46,6 +46,9 @@ class TestRouteConfig:
     def test_booking_qr_is_traveler(self):
         assert get_auth_mode("GET", "/api/v1/bookings/abc-123/qr") == AuthMode.TRAVELER
 
+    def test_booking_cancel_is_traveler(self):
+        assert get_auth_mode("POST", "/api/v1/bookings/abc-123/cancel") == AuthMode.TRAVELER
+
     def test_booking_hotel_routes_are_hotel_admin(self):
         assert get_auth_mode("GET", "/api/v1/bookings/hotel/") == AuthMode.HOTEL_ADMIN
         assert get_auth_mode("POST", "/api/v1/bookings/hotel/abc/status") == AuthMode.HOTEL_ADMIN
