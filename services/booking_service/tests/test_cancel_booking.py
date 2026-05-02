@@ -56,7 +56,7 @@ def _mock_db(booking: Booking | None = None):
     mock_result.scalar_one_or_none = AsyncMock(return_value=booking)
     mock_result.scalars = AsyncMock(return_value=AsyncMock(all=AsyncMock(return_value=[])))
     mock_db.execute = AsyncMock(return_value=mock_result)
-    
+
     # Configure commit and refresh
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
