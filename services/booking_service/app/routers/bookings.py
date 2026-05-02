@@ -167,3 +167,64 @@ async def get_booking_qr(
     return QRCodeResponse(
         qrCode=qr_token, bookingId=booking.id, guestName=booking.guest_name or "Guest"
     )
+
+
+@router.post("/{booking_id}/cancel", status_code=200)
+async def cancel_booking(
+    booking_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cancel an active booking.
+
+    Requirements:
+    - Booking must belong to the authenticated user
+    - Booking must be in 'confirmed' or 'pending' status
+    - Cannot cancel an already cancelled booking
+
+    Process (basic implementation):
+    1. Validate booking ownership and status
+    2. Update status to 'cancelled'
+    3. Return success response
+
+    Note: This is a basic implementation. Future enhancements will include:
+    - Room release in inventory service
+    - Refund processing in payment service
+    - User notification via notification service
+    """
+    # Fetch booking
+    result = await db.execute(select(Booking).where(Booking.id == booking_id))
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Verify ownership
+    if booking.user_id != user_id:
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to cancel this booking"
+        )
+
+    # Verify status - can only cancel pending or confirmed bookings
+    if booking.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Booking is already cancelled")
+
+    if booking.status not in ["pending", "confirmed"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel booking with status: {booking.status}",
+        )
+
+    # Update status to cancelled
+    booking.status = "cancelled"
+    await db.commit()
+    await db.refresh(booking)
+
+    # Build response
+    from ..services.booking_service import build_booking_response
+
+    response = build_booking_response(booking)
+    await enrich_booking_responses([response], [booking])
+
+    return response
