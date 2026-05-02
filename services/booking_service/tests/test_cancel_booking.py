@@ -51,11 +51,15 @@ def _mock_db(booking: Booking | None = None):
     """Create a mock database session."""
     mock_db = AsyncMock()
 
-    if booking:
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = booking
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+    # Configure execute to return a mock result
+    mock_result = AsyncMock()
+    mock_result.scalar_one_or_none = AsyncMock(return_value=booking)
+    mock_result.scalars = AsyncMock(return_value=AsyncMock(all=AsyncMock(return_value=[])))
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    
+    # Configure commit and refresh
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
 
     return mock_db
 
