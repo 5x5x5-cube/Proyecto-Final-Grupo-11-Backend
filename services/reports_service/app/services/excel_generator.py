@@ -119,7 +119,8 @@ class ExcelGenerator:
                     try:
                         if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
-                    except Exception:
+                    except Exception:  # nosec B110
+                        # Ignorar errores al calcular ancho de columna
                         pass
                 adjusted_width = min(max_length + 2, 50)
                 ws_trans.column_dimensions[column_letter].width = adjusted_width
