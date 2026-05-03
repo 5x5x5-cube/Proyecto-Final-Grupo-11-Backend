@@ -246,3 +246,38 @@ class PaymentResponse(BaseModel):
     processed_at: datetime | None = Field(None, alias="processedAt")
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Admin: payment listing ──
+
+
+class PaymentAdminListItem(BaseModel):
+    """Compact payment representation for the admin transactions table.
+
+    The frontend renders one row per item; cross-service enrichment (e.g.
+    looking up the user's name from auth_service) happens client-side.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID = Field(..., alias="userId")
+    amount: float
+    currency: str
+    method: str  # method_type from UserPaymentMethod
+    method_label: str = Field(..., alias="methodLabel")  # display_label, e.g. "Visa •••• 4242"
+    status: str
+    transaction_id: str | None = Field(None, alias="transactionId")
+    error_code: str | None = Field(None, alias="errorCode")
+    created_at: datetime = Field(..., alias="createdAt")
+    processed_at: datetime | None = Field(None, alias="processedAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminListResponse(BaseModel):
+    items: list[PaymentAdminListItem]
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    total: int
+    total_pages: int = Field(..., alias="totalPages")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

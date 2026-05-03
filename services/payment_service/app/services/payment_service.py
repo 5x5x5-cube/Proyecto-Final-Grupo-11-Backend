@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -9,6 +9,8 @@ from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredEr
 from ..models import ExchangeRate, Payment, PaymentToken, UserPaymentMethod
 from ..schemas import (
     InitiatePaymentRequest,
+    PaymentAdminListItem,
+    PaymentAdminListResponse,
     PaymentConfirmationWebhook,
     PaymentMethodResponse,
     PaymentResponse,
@@ -186,6 +188,85 @@ async def confirm_payment(
         await notify_payment_declined(payment, payment.user_id, webhook.error_code)
 
     await db.commit()
+
+
+async def list_payments(
+    db: AsyncSession,
+    *,
+    status: str | None = None,
+    method: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> PaymentAdminListResponse:
+    """Admin: list payments with filters and pagination.
+
+    Joins UserPaymentMethod so we can filter by method type and surface the
+    human-readable method label (e.g. "Visa •••• 4242") in a single round-trip.
+    """
+    conditions = []
+    if status:
+        conditions.append(Payment.status == status)
+    if method:
+        conditions.append(UserPaymentMethod.method_type == method)
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at <= date_to)
+    if amount_min is not None:
+        conditions.append(Payment.amount >= amount_min)
+    if amount_max is not None:
+        conditions.append(Payment.amount <= amount_max)
+
+    base_select = select(Payment, UserPaymentMethod).join(
+        UserPaymentMethod, Payment.payment_method_id == UserPaymentMethod.id
+    )
+    count_select = select(func.count(Payment.id)).join(
+        UserPaymentMethod, Payment.payment_method_id == UserPaymentMethod.id
+    )
+    if conditions:
+        where_clause = and_(*conditions)
+        base_select = base_select.where(where_clause)
+        count_select = count_select.where(where_clause)
+
+    total_result = await db.execute(count_select)
+    total = total_result.scalar() or 0
+
+    paged = (
+        base_select.order_by(Payment.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await db.execute(paged)).all()
+
+    items = [
+        PaymentAdminListItem(
+            id=p.id,
+            user_id=p.user_id,
+            amount=float(p.amount),
+            currency=p.currency,
+            method=pm.method_type,
+            method_label=pm.display_label,
+            status=p.status,
+            transaction_id=p.transaction_id,
+            error_code=p.error_code,
+            created_at=p.created_at,
+            processed_at=p.processed_at,
+        )
+        for p, pm in rows
+    ]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return PaymentAdminListResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+    )
 
 
 async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> PaymentResponse:

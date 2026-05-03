@@ -470,6 +470,157 @@ class TestConfirmationWebhook:
 
 
 # ---------------------------------------------------------------------------
+# Admin: list payments (HU4.4)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminListPayments:
+    """GET /api/v1/payments — admin listing with filters and pagination."""
+
+    def _setup_db(self, *, total: int, items: list):
+        """Build an AsyncMock that returns count then list on consecutive execute calls."""
+        db = AsyncMock()
+        count_result = MagicMock()
+        count_result.scalar.return_value = total
+        list_result = MagicMock()
+        list_result.all.return_value = items
+        db.execute = AsyncMock(side_effect=[count_result, list_result])
+        return db
+
+    async def test_list_returns_paginated_response(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        p1 = _make_payment(pm, status="approved")
+        p2 = _make_payment(pm, status="declined")
+        db = self._setup_db(total=2, items=[(p1, pm), (p2, pm)])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 2
+            assert data["page"] == 1
+            assert data["pageSize"] == 20
+            assert data["totalPages"] == 1
+            assert len(data["items"]) == 2
+            first = data["items"][0]
+            assert first["id"] == str(p1.id)
+            assert first["status"] == "approved"
+            assert first["methodLabel"] == pm.display_label
+            assert first["method"] == "credit_card"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_empty_returns_zero_total_pages(self):
+        db = self._setup_db(total=0, items=[])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 0
+            assert data["totalPages"] == 0
+            assert data["items"] == []
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_status_filter_passes_through(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        approved = _make_payment(pm, status="approved")
+        db = self._setup_db(total=1, items=[(approved, pm)])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments?status=approved")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 1
+            assert all(item["status"] == "approved" for item in data["items"])
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_pagination_default_pagesize_20(self):
+        db = self._setup_db(total=50, items=[])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["page"] == 1
+            assert data["pageSize"] == 20
+            assert data["total"] == 50
+            # 50 items / 20 per page = 3 pages (ceil)
+            assert data["totalPages"] == 3
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_custom_page_and_pagesize(self):
+        db = self._setup_db(total=50, items=[])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments?page=2&pageSize=10")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["page"] == 2
+            assert data["pageSize"] == 10
+            assert data["totalPages"] == 5  # 50 / 10
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_validates_page_bounds(self):
+        # page < 1 → 422
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/payments?page=0")
+        assert response.status_code == 422
+
+        # pageSize > 100 → 422 (prevents resource exhaustion via huge page sizes)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/payments?pageSize=200")
+        assert response.status_code == 422
+
+    async def test_list_accepts_combined_filters(self):
+        db = self._setup_db(total=1, items=[])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/v1/payments"
+                    "?status=approved&method=credit_card"
+                    "&dateFrom=2026-01-01T00:00:00&dateTo=2026-12-31T23:59:59"
+                    "&amountMin=100&amountMax=5000000"
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 1
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
 # Model security
 # ---------------------------------------------------------------------------
 
