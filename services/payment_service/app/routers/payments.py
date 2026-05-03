@@ -1,9 +1,11 @@
 """Payment service endpoints — our domain."""
 
 import uuid
+from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,13 +15,18 @@ from ..models import ExchangeRate
 from ..schemas import (
     ExchangeRateResponse,
     InitiatePaymentRequest,
+    PaymentAdminListResponse,
+    PaymentAdminSummary,
     PaymentConfirmationWebhook,
     PaymentResponse,
 )
 from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import confirm_payment
+from ..services.payment_service import export_payments_csv as export_payments_csv_svc
 from ..services.payment_service import get_payment as get_payment_svc
+from ..services.payment_service import get_payments_summary as get_payments_summary_svc
 from ..services.payment_service import initiate_payment
+from ..services.payment_service import list_payments as list_payments_svc
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -82,6 +89,90 @@ async def get_exchange_rates(db: AsyncSession = Depends(get_db)):
     """Return current exchange rates (COP base). Public, cacheable."""
     result = await db.execute(select(ExchangeRate))
     return result.scalars().all()
+
+
+@router.get("", response_model=PaymentAdminListResponse)
+async def list_payments_endpoint(
+    status: str | None = Query(None),
+    method: str | None = Query(None),
+    date_from: datetime | None = Query(None, alias="dateFrom"),
+    date_to: datetime | None = Query(None, alias="dateTo"),
+    amount_min: float | None = Query(None, alias="amountMin"),
+    amount_max: float | None = Query(None, alias="amountMax"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list payments with filters and pagination.
+
+    Query params (all optional):
+      - status: approved | declined | processing | refunded
+      - method: credit_card | debit_card | digital_wallet | transfer
+      - dateFrom, dateTo: ISO datetimes filtering by Payment.created_at
+      - amountMin, amountMax: numeric bounds on Payment.amount
+      - page (>=1), pageSize (1-100)
+    """
+    return await list_payments_svc(
+        db=db,
+        status=status,
+        method=method,
+        date_from=date_from,
+        date_to=date_to,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/summary", response_model=PaymentAdminSummary)
+async def payments_summary_endpoint(
+    date_from: datetime | None = Query(None, alias="dateFrom"),
+    date_to: datetime | None = Query(None, alias="dateTo"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: aggregated payment metrics for a date window.
+
+    Returns counts and amounts per status plus the approval rate
+    (approved / decided). Used by the dashboard summary cards.
+    """
+    return await get_payments_summary_svc(db=db, date_from=date_from, date_to=date_to)
+
+
+@router.get("/export")
+async def export_payments_endpoint(
+    format: str = Query("csv"),
+    status: str | None = Query(None),
+    method: str | None = Query(None),
+    date_from: datetime | None = Query(None, alias="dateFrom"),
+    date_to: datetime | None = Query(None, alias="dateTo"),
+    amount_min: float | None = Query(None, alias="amountMin"),
+    amount_max: float | None = Query(None, alias="amountMax"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: export filtered payments as a downloadable CSV.
+
+    Accepts the same filters as the listing endpoint but skips pagination
+    so the export covers every matching row. Only `format=csv` is supported
+    today; other formats return 400.
+    """
+    if format != "csv":
+        raise HTTPException(status_code=400, detail="Only CSV format is supported")
+
+    csv_data = await export_payments_csv_svc(
+        db=db,
+        status=status,
+        method=method,
+        date_from=date_from,
+        date_to=date_to,
+        amount_min=amount_min,
+        amount_max=amount_max,
+    )
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
+    )
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

@@ -246,3 +246,61 @@ class PaymentResponse(BaseModel):
     processed_at: datetime | None = Field(None, alias="processedAt")
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Admin: payment listing ──
+
+
+class PaymentAdminListItem(BaseModel):
+    """Compact payment representation for the admin transactions table.
+
+    The frontend renders one row per item; cross-service enrichment (e.g.
+    looking up the user's name from auth_service) happens client-side.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID = Field(..., alias="userId")
+    amount: float
+    currency: str
+    method: str  # method_type from UserPaymentMethod
+    method_label: str = Field(..., alias="methodLabel")  # display_label, e.g. "Visa •••• 4242"
+    status: str
+    transaction_id: str | None = Field(None, alias="transactionId")
+    error_code: str | None = Field(None, alias="errorCode")
+    created_at: datetime = Field(..., alias="createdAt")
+    processed_at: datetime | None = Field(None, alias="processedAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminListResponse(BaseModel):
+    items: list[PaymentAdminListItem]
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    total: int
+    total_pages: int = Field(..., alias="totalPages")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminSummary(BaseModel):
+    """Aggregated payment metrics for the admin dashboard cards.
+
+    Amounts are summed without currency conversion — single-currency hotels
+    will be accurate; multi-currency aggregations would need a base-currency
+    conversion step (out of scope for HU4.4).
+    """
+
+    total_processed: float = Field(..., alias="totalProcessed")  # sum of approved
+    total_declined: float = Field(..., alias="totalDeclined")
+    total_refunded: float = Field(..., alias="totalRefunded")
+    # approved / (approved + declined) — float 0..1, 0.0 when there are no decided payments
+    approval_rate: float = Field(..., alias="approvalRate")
+    transaction_count: int = Field(..., alias="transactionCount")
+    approved_count: int = Field(..., alias="approvedCount")
+    declined_count: int = Field(..., alias="declinedCount")
+    refunded_count: int = Field(..., alias="refundedCount")
+    processing_count: int = Field(..., alias="processingCount")
+    currency: str  # dominant currency of the aggregated rows; "COP" by default
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
