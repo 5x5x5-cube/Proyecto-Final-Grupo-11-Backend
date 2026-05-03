@@ -281,3 +281,26 @@ class PaymentAdminListResponse(BaseModel):
     total_pages: int = Field(..., alias="totalPages")
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminSummary(BaseModel):
+    """Aggregated payment metrics for the admin dashboard cards.
+
+    Amounts are summed without currency conversion — single-currency hotels
+    will be accurate; multi-currency aggregations would need a base-currency
+    conversion step (out of scope for HU4.4).
+    """
+
+    total_processed: float = Field(..., alias="totalProcessed")  # sum of approved
+    total_declined: float = Field(..., alias="totalDeclined")
+    total_refunded: float = Field(..., alias="totalRefunded")
+    # approved / (approved + declined) — float 0..1, 0.0 when there are no decided payments
+    approval_rate: float = Field(..., alias="approvalRate")
+    transaction_count: int = Field(..., alias="transactionCount")
+    approved_count: int = Field(..., alias="approvedCount")
+    declined_count: int = Field(..., alias="declinedCount")
+    refunded_count: int = Field(..., alias="refundedCount")
+    processing_count: int = Field(..., alias="processingCount")
+    currency: str  # dominant currency of the aggregated rows; "COP" by default
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

@@ -621,6 +621,208 @@ class TestAdminListPayments:
 
 
 # ---------------------------------------------------------------------------
+# Admin: payments summary (HU4.4)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminPaymentsSummary:
+    """GET /api/v1/payments/summary — aggregated metrics."""
+
+    def _row(self, status: str, count: int, amount: float):
+        """Build a row mock matching what GROUP BY status returns."""
+        row = MagicMock()
+        row.status = status
+        row.count = count
+        row.amount = amount
+        return row
+
+    def _setup_db(self, rows: list):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = rows
+        db.execute = AsyncMock(return_value=result)
+        return db
+
+    async def test_summary_with_mixed_statuses(self):
+        rows = [
+            self._row("approved", 8, 4_000_000.0),
+            self._row("declined", 2, 500_000.0),
+            self._row("refunded", 1, 250_000.0),
+            self._row("processing", 3, 0.0),
+        ]
+        db = self._setup_db(rows)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/summary")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["totalProcessed"] == 4_000_000.0
+            assert data["totalDeclined"] == 500_000.0
+            assert data["totalRefunded"] == 250_000.0
+            assert data["approvedCount"] == 8
+            assert data["declinedCount"] == 2
+            assert data["refundedCount"] == 1
+            assert data["processingCount"] == 3
+            assert data["transactionCount"] == 14
+            # 8 / (8 + 2) = 0.8
+            assert data["approvalRate"] == 0.8
+            assert data["currency"] == "COP"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_summary_no_payments_returns_zeros(self):
+        db = self._setup_db([])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/summary")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["totalProcessed"] == 0
+            assert data["transactionCount"] == 0
+            # No decided payments → approval rate is 0, not NaN
+            assert data["approvalRate"] == 0.0
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_summary_only_processing_does_not_divide_by_zero(self):
+        # Only `processing` rows means decided count = 0.
+        rows = [self._row("processing", 5, 0.0)]
+        db = self._setup_db(rows)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/summary")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["approvalRate"] == 0.0
+            assert data["processingCount"] == 5
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_summary_accepts_date_range(self):
+        db = self._setup_db([self._row("approved", 1, 100.0)])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/v1/payments/summary"
+                    "?dateFrom=2026-01-01T00:00:00&dateTo=2026-12-31T23:59:59"
+                )
+
+            assert response.status_code == 200
+            assert response.json()["totalProcessed"] == 100.0
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Admin: payments CSV export (HU4.4)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminExportPayments:
+    """GET /api/v1/payments/export — CSV download."""
+
+    async def test_export_returns_csv_with_header_and_rows(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        p1 = _make_payment(pm, status="approved")
+        p2 = _make_payment(pm, status="declined")
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = [(p1, pm), (p2, pm)]
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/export")
+
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/csv")
+            assert "attachment" in response.headers["content-disposition"]
+            assert "transactions.csv" in response.headers["content-disposition"]
+
+            body = response.text
+            lines = body.strip().splitlines()
+            assert lines[0].startswith("id,user_id,amount,currency,method,method_label,status")
+            # 2 data rows + header
+            assert len(lines) == 3
+            assert str(p1.id) in lines[1]
+            assert "approved" in lines[1]
+            assert "declined" in lines[2]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_export_unsupported_format_returns_400(self):
+        db = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/export?format=xlsx")
+
+            assert response.status_code == 400
+            assert "CSV" in response.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_export_empty_returns_only_header(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = []
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/export")
+
+            assert response.status_code == 200
+            lines = response.text.strip().splitlines()
+            assert len(lines) == 1  # only header
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_export_accepts_filters(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.all.return_value = []
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/v1/payments/export"
+                    "?status=approved&method=credit_card"
+                    "&dateFrom=2026-01-01T00:00:00&amountMin=100"
+                )
+
+            assert response.status_code == 200
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
 # Model security
 # ---------------------------------------------------------------------------
 

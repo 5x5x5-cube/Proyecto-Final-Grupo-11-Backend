@@ -1,3 +1,5 @@
+import csv
+import io
 import uuid
 from datetime import datetime, timezone
 
@@ -11,6 +13,7 @@ from ..schemas import (
     InitiatePaymentRequest,
     PaymentAdminListItem,
     PaymentAdminListResponse,
+    PaymentAdminSummary,
     PaymentConfirmationWebhook,
     PaymentMethodResponse,
     PaymentResponse,
@@ -267,6 +270,138 @@ async def list_payments(
         total=total,
         total_pages=total_pages,
     )
+
+
+async def get_payments_summary(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> PaymentAdminSummary:
+    """Aggregate payment counts and amounts grouped by status over a date window.
+
+    Single round-trip: GROUP BY status returning (status, count, sum). The
+    approval rate is approved / (approved + declined) — payments still in
+    `processing` are excluded from the denominator because they have not
+    been decided yet.
+    """
+    conditions: list = []
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at <= date_to)
+
+    q = select(
+        Payment.status,
+        func.count(Payment.id).label("count"),
+        func.coalesce(func.sum(Payment.amount), 0).label("amount"),
+    )
+    if conditions:
+        q = q.where(and_(*conditions))
+    q = q.group_by(Payment.status)
+
+    rows = (await db.execute(q)).all()
+    by_status: dict[str, tuple[int, float]] = {
+        row.status: (int(row.count), float(row.amount)) for row in rows
+    }
+
+    approved_count, total_processed = by_status.get("approved", (0, 0.0))
+    declined_count, total_declined = by_status.get("declined", (0, 0.0))
+    refunded_count, total_refunded = by_status.get("refunded", (0, 0.0))
+    processing_count, _ = by_status.get("processing", (0, 0.0))
+
+    decided = approved_count + declined_count
+    approval_rate = (approved_count / decided) if decided > 0 else 0.0
+
+    transaction_count = approved_count + declined_count + refunded_count + processing_count
+
+    return PaymentAdminSummary(
+        total_processed=total_processed,
+        total_declined=total_declined,
+        total_refunded=total_refunded,
+        approval_rate=approval_rate,
+        transaction_count=transaction_count,
+        approved_count=approved_count,
+        declined_count=declined_count,
+        refunded_count=refunded_count,
+        processing_count=processing_count,
+        currency="COP",
+    )
+
+
+async def export_payments_csv(
+    db: AsyncSession,
+    *,
+    status: str | None = None,
+    method: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+) -> str:
+    """Render filtered payments as a CSV string. Same filters as list_payments
+    but no pagination — the caller exports all matching rows.
+
+    Returns a fully-rendered CSV. For very large exports this could be
+    converted to a streaming generator; today's volume does not justify it.
+    """
+    conditions: list = []
+    if status:
+        conditions.append(Payment.status == status)
+    if method:
+        conditions.append(UserPaymentMethod.method_type == method)
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at <= date_to)
+    if amount_min is not None:
+        conditions.append(Payment.amount >= amount_min)
+    if amount_max is not None:
+        conditions.append(Payment.amount <= amount_max)
+
+    q = select(Payment, UserPaymentMethod).join(
+        UserPaymentMethod, Payment.payment_method_id == UserPaymentMethod.id
+    )
+    if conditions:
+        q = q.where(and_(*conditions))
+    q = q.order_by(Payment.created_at.desc())
+
+    rows = (await db.execute(q)).all()
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "id",
+            "user_id",
+            "amount",
+            "currency",
+            "method",
+            "method_label",
+            "status",
+            "transaction_id",
+            "error_code",
+            "created_at",
+            "processed_at",
+        ]
+    )
+    for p, pm in rows:
+        writer.writerow(
+            [
+                str(p.id),
+                str(p.user_id),
+                float(p.amount),
+                p.currency,
+                pm.method_type,
+                pm.display_label,
+                p.status,
+                p.transaction_id or "",
+                p.error_code or "",
+                p.created_at.isoformat() if p.created_at else "",
+                p.processed_at.isoformat() if p.processed_at else "",
+            ]
+        )
+    return buffer.getvalue()
 
 
 async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> PaymentResponse:
