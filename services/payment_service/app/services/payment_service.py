@@ -7,7 +7,13 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
-from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
+from ..exceptions import (
+    InvalidTokenError,
+    PaymentNotFoundError,
+    PaymentNotRefundableError,
+    RefundAmountInvalidError,
+    TokenExpiredError,
+)
 from ..models import ExchangeRate, Payment, PaymentToken, UserPaymentMethod
 from ..schemas import (
     InitiatePaymentRequest,
@@ -17,6 +23,7 @@ from ..schemas import (
     PaymentConfirmationWebhook,
     PaymentMethodResponse,
     PaymentResponse,
+    RefundResponse,
 )
 from . import cart_client, payment_adapter
 from .notification_service import notify_payment_confirmed, notify_payment_declined
@@ -402,6 +409,56 @@ async def export_payments_csv(
             ]
         )
     return buffer.getvalue()
+
+
+async def refund_payment(
+    db: AsyncSession,
+    payment_id: uuid.UUID,
+    amount: float,
+    reason: str | None = None,
+) -> RefundResponse:
+    """Mark an approved payment as refunded for the given amount.
+
+    HU4.3 — refunds are only allowed against payments that were approved.
+    Already-refunded, declined or processing payments are rejected. The
+    requested amount must be a positive number not greater than the original.
+
+    Real-world refunds would also call out to the gateway adapter; that part
+    is intentionally left for later (the gateway interaction is out of scope
+    for this story — we record the state transition only).
+    """
+    if amount <= 0:
+        raise RefundAmountInvalidError("Refund amount must be greater than zero")
+
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    if not payment:
+        raise PaymentNotFoundError(str(payment_id))
+
+    if payment.status != "approved":
+        raise PaymentNotRefundableError(payment.status)
+
+    if amount > float(payment.amount):
+        raise RefundAmountInvalidError(
+            f"Refund amount {amount} exceeds original payment amount {payment.amount}"
+        )
+
+    now = datetime.now(timezone.utc)
+    payment.status = "refunded"
+    payment.refund_amount = amount
+    payment.refunded_at = now
+    await db.commit()
+    await db.refresh(payment)
+
+    return RefundResponse(
+        payment_id=payment.id,
+        status=payment.status,
+        amount=float(payment.amount),
+        currency=payment.currency,
+        refund_amount=float(payment.refund_amount or 0),
+        refunded_at=payment.refunded_at or now,
+        reason=reason,
+    )
 
 
 async def get_payment(db: AsyncSession, payment_id: uuid.UUID) -> PaymentResponse:

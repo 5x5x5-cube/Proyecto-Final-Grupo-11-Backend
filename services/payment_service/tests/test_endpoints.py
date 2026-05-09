@@ -823,6 +823,171 @@ class TestAdminExportPayments:
 
 
 # ---------------------------------------------------------------------------
+# Refund endpoint (HU4.3)
+# ---------------------------------------------------------------------------
+
+
+class TestRefundEndpoint:
+    """POST /api/v1/payments/{id}/refund — partial/full refunds for approved payments."""
+
+    async def test_refund_full_amount_marks_payment_refunded(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="approved")
+        # _make_payment returns amount=500000.00; refund the full amount
+        full_amount = float(payment.amount)
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/refund",
+                    json={"amount": full_amount, "reason": "user_cancelled"},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "refunded"
+            assert data["refundAmount"] == full_amount
+            assert data["amount"] == full_amount  # original is preserved
+            assert data["reason"] == "user_cancelled"
+            assert "refundedAt" in data
+            # Verify the payment object was mutated
+            assert payment.status == "refunded"
+            assert float(payment.refund_amount) == full_amount
+            assert payment.refunded_at is not None
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_refund_partial_amount_succeeds(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="approved")
+        partial = float(payment.amount) / 2
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/refund",
+                    json={"amount": partial},
+                )
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["refundAmount"] == partial
+            # Original amount is unchanged — useful for reporting
+            assert data["amount"] == float(payment.amount)
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_refund_unknown_payment_returns_404(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            unknown = uuid.uuid4()
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{unknown}/refund",
+                    json={"amount": 100.0},
+                )
+
+            assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_refund_non_approved_payment_returns_400(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        # Already refunded — should be rejected
+        payment = _make_payment(pm, status="refunded")
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/refund",
+                    json={"amount": 100.0},
+                )
+
+            assert response.status_code == 400
+            assert "refunded" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_refund_amount_greater_than_original_returns_400(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="approved")
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/refund",
+                    json={"amount": float(payment.amount) + 1.0},
+                )
+
+            assert response.status_code == 400
+            assert "exceeds" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_refund_zero_or_negative_amount_returns_400(self):
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="approved")
+
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/{payment.id}/refund",
+                    json={"amount": 0},
+                )
+
+            assert response.status_code == 400
+            assert "greater than zero" in response.json()["detail"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
 # Model security
 # ---------------------------------------------------------------------------
 

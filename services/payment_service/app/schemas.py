@@ -283,6 +283,34 @@ class PaymentAdminListResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
 
+# ── Refund (HU4.3) ──
+
+
+class RefundRequest(BaseModel):
+    """Request body for POST /payments/{id}/refund.
+
+    `amount` is required so the caller (booking_service) can apply the
+    cancellation policy (100% / 50% / 0%) and pass the resulting figure.
+    """
+
+    amount: float
+    reason: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class RefundResponse(BaseModel):
+    payment_id: uuid.UUID = Field(..., alias="paymentId")
+    status: str  # always "refunded" on success
+    amount: float  # the original payment amount, untouched
+    currency: str
+    refund_amount: float = Field(..., alias="refundAmount")
+    refunded_at: datetime = Field(..., alias="refundedAt")
+    reason: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 class PaymentAdminSummary(BaseModel):
     """Aggregated payment metrics for the admin dashboard cards.
 

@@ -306,3 +306,151 @@ class TestEventDispatch:
     async def test_handles_invalid_json(self, consumer):
         result = await consumer.process_message("not valid json")
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# HU4.3 — booking.cancelled handler (refund notification)
+# ---------------------------------------------------------------------------
+
+
+def _make_booking_cancelled_event(
+    *,
+    refund_status: str = "processed",
+    refund_amount: str = "62000",
+    currency: str = "COP",
+    user_id: uuid.UUID | None = None,
+    booking_id: uuid.UUID | None = None,
+) -> str:
+    return json.dumps(
+        {
+            "event_id": str(uuid.uuid4()),
+            "event_type": "booking.cancelled",
+            "entity_type": "booking",
+            "timestamp": "2026-04-30T12:00:00",
+            "data": {
+                "booking": {
+                    "id": str(booking_id or uuid.uuid4()),
+                    "user_id": str(user_id or uuid.uuid4()),
+                    "room_id": str(uuid.uuid4()),
+                    "hotel_id": str(uuid.uuid4()),
+                    "check_in": "2026-06-01",
+                    "check_out": "2026-06-05",
+                    "currency": currency,
+                    "refund_amount": refund_amount,
+                    "refund_percentage": 0.5,
+                    "refund_status": refund_status,
+                }
+            },
+            "metadata": {
+                "retry_count": 0,
+                "correlation_id": str(uuid.uuid4()),
+                "source_service": "booking-service",
+            },
+        }
+    )
+
+
+class TestBookingCancelledHandler:
+    """booking.cancelled → push notification with the refund outcome (HU4.3 CA5)."""
+
+    async def test_processed_refund_pushes_with_amount_and_eta(self, consumer, mock_db_session):
+        event = _make_booking_cancelled_event(refund_status="processed", refund_amount="62000")
+        consumer._get_session = _mock_session(mock_db_session)
+        consumer.get_user_push_tokens = AsyncMock(return_value=["ExpoPushToken[abc]"])
+
+        with patch(
+            "app.services.sqs_consumer.expo_push_service", new_callable=MagicMock
+        ) as mock_push:
+            mock_push.send_push_notification = AsyncMock(
+                return_value={"success": 1, "failed": 0, "invalid_tokens": []}
+            )
+
+            assert (await consumer.process_message(event)) is True
+            mock_push.send_push_notification.assert_called_once()
+            kwargs = mock_push.send_push_notification.call_args.kwargs
+            assert "Reembolso" in kwargs["title"]
+            assert "62000" in kwargs["body"]
+            assert "5 a 10" in kwargs["body"]
+            assert kwargs["data"]["refundStatus"] == "processed"
+
+    async def test_no_refund_uses_policy_message(self, consumer, mock_db_session):
+        event = _make_booking_cancelled_event(refund_status="no_refund", refund_amount="0")
+        consumer._get_session = _mock_session(mock_db_session)
+        consumer.get_user_push_tokens = AsyncMock(return_value=["ExpoPushToken[abc]"])
+
+        with patch(
+            "app.services.sqs_consumer.expo_push_service", new_callable=MagicMock
+        ) as mock_push:
+            mock_push.send_push_notification = AsyncMock(
+                return_value={"success": 1, "failed": 0, "invalid_tokens": []}
+            )
+
+            assert (await consumer.process_message(event)) is True
+            kwargs = mock_push.send_push_notification.call_args.kwargs
+            assert kwargs["title"] == "Reserva cancelada"
+            assert "no aplica reembolso" in kwargs["body"]
+
+    async def test_failed_refund_uses_failure_message(self, consumer, mock_db_session):
+        event = _make_booking_cancelled_event(refund_status="failed")
+        consumer._get_session = _mock_session(mock_db_session)
+        consumer.get_user_push_tokens = AsyncMock(return_value=["ExpoPushToken[abc]"])
+
+        with patch(
+            "app.services.sqs_consumer.expo_push_service", new_callable=MagicMock
+        ) as mock_push:
+            mock_push.send_push_notification = AsyncMock(
+                return_value={"success": 1, "failed": 0, "invalid_tokens": []}
+            )
+
+            assert (await consumer.process_message(event)) is True
+            body = mock_push.send_push_notification.call_args.kwargs["body"]
+            assert "inconveniente con el reembolso" in body
+
+    async def test_no_tokens_returns_true_without_pushing(self, consumer, mock_db_session):
+        """If the user has no devices we don't fail — just skip silently."""
+        event = _make_booking_cancelled_event()
+        consumer._get_session = _mock_session(mock_db_session)
+        consumer.get_user_push_tokens = AsyncMock(return_value=[])
+
+        with patch(
+            "app.services.sqs_consumer.expo_push_service", new_callable=MagicMock
+        ) as mock_push:
+            mock_push.send_push_notification = AsyncMock()
+            assert (await consumer.process_message(event)) is True
+            mock_push.send_push_notification.assert_not_called()
+
+    async def test_missing_required_fields_returns_false(self, consumer, mock_db_session):
+        """Without user_id or booking id we can't deliver — flag for retry."""
+        event = json.dumps(
+            {
+                "event_type": "booking.cancelled",
+                "entity_type": "booking",
+                "data": {"booking": {"refund_status": "processed"}},
+            }
+        )
+        consumer._get_session = _mock_session(mock_db_session)
+        result = await consumer.process_message(event)
+        assert result is False
+
+    async def test_history_records_refund_metadata(self, consumer, mock_db_session):
+        """Notification history must persist refund info under extra_data."""
+        event = _make_booking_cancelled_event(refund_status="processed", refund_amount="62000")
+        consumer._get_session = _mock_session(mock_db_session)
+        consumer.get_user_push_tokens = AsyncMock(return_value=["ExpoPushToken[abc]"])
+        consumer.save_notification_history = AsyncMock()
+
+        with patch(
+            "app.services.sqs_consumer.expo_push_service", new_callable=MagicMock
+        ) as mock_push:
+            mock_push.send_push_notification = AsyncMock(
+                return_value={"success": 1, "failed": 0, "invalid_tokens": []}
+            )
+
+            await consumer.process_message(event)
+
+            consumer.save_notification_history.assert_awaited_once()
+            kwargs = consumer.save_notification_history.call_args.kwargs
+            assert kwargs["notification_type"] == "booking_cancelled_refund_processed"
+            assert kwargs["extra_data"]["refund_status"] == "processed"
+            assert kwargs["extra_data"]["refund_amount"] == "62000"
+            assert kwargs["extra_data"]["currency"] == "COP"

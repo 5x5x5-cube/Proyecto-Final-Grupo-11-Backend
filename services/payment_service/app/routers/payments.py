@@ -10,7 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..exceptions import InvalidTokenError, PaymentNotFoundError, TokenExpiredError
+from ..exceptions import (
+    InvalidTokenError,
+    PaymentNotFoundError,
+    PaymentNotRefundableError,
+    RefundAmountInvalidError,
+    TokenExpiredError,
+)
 from ..models import ExchangeRate
 from ..schemas import (
     ExchangeRateResponse,
@@ -19,6 +25,8 @@ from ..schemas import (
     PaymentAdminSummary,
     PaymentConfirmationWebhook,
     PaymentResponse,
+    RefundRequest,
+    RefundResponse,
 )
 from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import confirm_payment
@@ -27,6 +35,7 @@ from ..services.payment_service import get_payment as get_payment_svc
 from ..services.payment_service import get_payments_summary as get_payments_summary_svc
 from ..services.payment_service import initiate_payment
 from ..services.payment_service import list_payments as list_payments_svc
+from ..services.payment_service import refund_payment as refund_payment_svc
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -173,6 +182,38 @@ async def export_payments_endpoint(
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
     )
+
+
+@router.post("/{payment_id}/refund", response_model=RefundResponse, status_code=200)
+async def refund_payment_endpoint(
+    payment_id: uuid.UUID,
+    request: RefundRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Refund an approved payment for the given amount (HU4.3).
+
+    Internal endpoint — invoked by booking_service after applying the
+    cancellation policy. The amount is computed by the caller (100% / 50% /
+    0%) so this endpoint stays policy-agnostic.
+
+    Errors:
+    - 404 if the payment does not exist
+    - 400 if the payment is not in approved state
+    - 400 if the requested amount is invalid (<= 0 or > original)
+    """
+    try:
+        return await refund_payment_svc(
+            db=db,
+            payment_id=payment_id,
+            amount=request.amount,
+            reason=request.reason,
+        )
+    except PaymentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PaymentNotRefundableError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RefundAmountInvalidError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

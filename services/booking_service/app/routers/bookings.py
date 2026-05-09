@@ -12,6 +12,9 @@ from ..exceptions import BookingNotFoundError
 from ..models import Booking
 from ..schemas import BookingListResponse, BookingResponse, CreateBookingRequest, QRCodeResponse
 from ..services.booking_service import create_booking, enrich_booking_responses
+from ..services.cancellation_policy import calculate_refund_percentage, days_until_check_in
+from ..services.payment_client import PaymentServiceError, request_refund
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/api/v1/bookings", tags=["bookings"])
 
@@ -176,22 +179,20 @@ async def cancel_booking(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Cancel an active booking.
+    Cancel an active booking and apply the refund policy (HU4.3).
 
-    Requirements:
-    - Booking must belong to the authenticated user
-    - Booking must be in 'confirmed' or 'pending' status
-    - Cannot cancel an already cancelled booking
-
-    Process (basic implementation):
-    1. Validate booking ownership and status
-    2. Update status to 'cancelled'
-    3. Return success response
-
-    Note: This is a basic implementation. Future enhancements will include:
-    - Room release in inventory service
-    - Refund processing in payment service
-    - User notification via notification service
+    Flow:
+    1. Validate ownership and status (only pending/confirmed can be cancelled).
+    2. Compute refund percentage from days-until-check-in:
+       - more than 7 days  → 100% refund
+       - 2 to 7 days       → 50% refund
+       - less than 2 days  → 0% (no refund)
+    3. Mark the booking as cancelled (single DB commit).
+    4. If percentage > 0 and the booking has a payment_id, call
+       payment_service /refund. A failure there does NOT roll back the
+       cancellation — the refund is recorded as failed and can be retried.
+    5. Publish booking.cancelled to SNS so inventory_service releases the
+       room and notification_service alerts the traveler with the amount.
     """
     # Fetch booking
     result = await db.execute(select(Booking).where(Booking.id == booking_id))
@@ -216,10 +217,51 @@ async def cancel_booking(
             detail=f"Cannot cancel booking with status: {booking.status}",
         )
 
-    # Update status to cancelled
+    previous_status = booking.status
+
+    # Calculate the refund based on the cancellation policy
+    today = datetime.now(timezone.utc).date()
+    refund_pct = calculate_refund_percentage(booking.check_in, today)
+    days_left = days_until_check_in(booking.check_in, today)
+    refund_amount = round(float(booking.total_price) * refund_pct, 2)
+
+    # Mark booking as cancelled
     booking.status = "cancelled"
     await db.commit()
     await db.refresh(booking)
+
+    # Trigger refund on payment_service if applicable
+    refund_status = "no_refund"
+    if refund_amount > 0 and booking.payment_id is not None:
+        try:
+            await request_refund(
+                payment_id=booking.payment_id,
+                amount=refund_amount,
+                reason="user_cancelled",
+            )
+            refund_status = "processed"
+        except PaymentServiceError:
+            # Booking is already cancelled at this point; surface a flagged
+            # state to downstream consumers so the user can be told and ops
+            # can retry. We avoid logging payment details on purpose.
+            refund_status = "failed"
+
+    # Publish booking.cancelled — inventory + notification consumers handle the rest.
+    # The publisher swallows AWS errors internally; cancellation must not depend
+    # on it succeeding (it's a best-effort fanout).
+    await sns_publisher.publish_booking_cancelled(
+        booking_id=str(booking.id),
+        user_id=str(booking.user_id),
+        room_id=str(booking.room_id),
+        hotel_id=str(booking.hotel_id),
+        check_in=booking.check_in.isoformat(),
+        check_out=booking.check_out.isoformat(),
+        currency=booking.currency,
+        refund_amount=str(refund_amount),
+        refund_percentage=refund_pct,
+        refund_status=refund_status,
+        previous_status=previous_status,
+    )
 
     # Build response
     from ..services.booking_service import build_booking_response
@@ -227,4 +269,13 @@ async def cancel_booking(
     response = build_booking_response(booking)
     await enrich_booking_responses([response], [booking])
 
-    return response
+    # Decorate with refund info — the response_model is intentionally absent on
+    # this endpoint so we can return a richer dict than BookingResponse.
+    response_dict = response.model_dump(by_alias=True)
+    response_dict["cancellation"] = {
+        "refundAmount": refund_amount,
+        "refundPercentage": refund_pct,
+        "refundStatus": refund_status,
+        "daysUntilCheckIn": days_left,
+    }
+    return response_dict

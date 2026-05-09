@@ -16,7 +16,7 @@ from .data_enrichment import get_booking_info, get_payment_info, get_user_info
 from .email_builder import build_payment_confirmation_email
 from .email_service import email_service
 from .expo_push import expo_push_service
-from .notification_builder import build_booking_notification
+from .notification_builder import build_booking_notification, build_cancellation_refund_notification
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +242,70 @@ class SQSConsumer:
 
             return True
 
+    async def _handle_booking_cancelled(self, booking_data: dict) -> bool:
+        """Handle booking.cancelled events — push the refund result to the user (HU4.3 CA5).
+
+        The push wording is built by ``build_cancellation_refund_notification`` and
+        depends on ``refund_status`` (processed | failed | no_refund) plus the
+        amount and currency carried in the event payload.
+        """
+        user_id_str = booking_data.get("user_id")
+        booking_id_str = booking_data.get("id")
+
+        if not user_id_str or not booking_id_str:
+            logger.error("Missing required fields in booking.cancelled event")
+            return False
+
+        user_id = uuid.UUID(user_id_str)
+        booking_id = uuid.UUID(booking_id_str)
+
+        async with self._get_session() as db:
+            tokens = await self.get_user_push_tokens(db, user_id)
+
+            if not tokens:
+                logger.info(f"No push tokens found for user {user_id}")
+                return True
+
+            notification = build_cancellation_refund_notification(booking_data)
+
+            result = await expo_push_service.send_push_notification(
+                tokens=tokens,
+                title=notification["title"],
+                body=notification["body"],
+                data={
+                    "bookingId": str(booking_id),
+                    "refundStatus": booking_data.get("refund_status", "no_refund"),
+                    "refundAmount": booking_data.get("refund_amount", "0"),
+                },
+            )
+
+            if result["invalid_tokens"]:
+                await self.remove_invalid_tokens(db, result["invalid_tokens"])
+
+            delivered = result["success"] > 0
+            error_msg = None if delivered else "Failed to deliver to all devices"
+
+            await self.save_notification_history(
+                db=db,
+                user_id=user_id,
+                booking_id=booking_id,
+                notification_type=notification["type"],
+                title=notification["title"],
+                body=notification["body"],
+                delivered=delivered,
+                error_message=error_msg,
+                extra_data={
+                    "refund_status": booking_data.get("refund_status"),
+                    "refund_amount": booking_data.get("refund_amount"),
+                    "currency": booking_data.get("currency"),
+                },
+            )
+
+            logger.info(
+                f"Cancellation push sent: {result['success']} success, {result['failed']} failed"
+            )
+            return True
+
     async def process_message(self, message_body: str) -> bool:
         """Process a single SQS message by dispatching to the appropriate handler."""
         try:
@@ -259,6 +323,8 @@ class SQSConsumer:
                 return await self._handle_booking_status_updated(booking_data)
             elif event_type == "booking_created":
                 return await self._handle_booking_created(booking_data)
+            elif event_type == "booking.cancelled":
+                return await self._handle_booking_cancelled(booking_data)
             else:
                 logger.debug(f"Skipping unhandled event type: {event_type}")
                 return True
