@@ -103,5 +103,42 @@ class SNSPublisher:
             },
         )
 
+    async def publish_booking_cancelled(
+        self,
+        booking_id: str,
+        user_id: str,
+        room_id: str,
+        hotel_id: str,
+        check_in: str,
+        check_out: str,
+        currency: str,
+        refund_amount: str,
+        refund_percentage: float,
+        refund_status: str,
+        previous_status: str,
+    ) -> bool:
+        """Publish booking.cancelled (HU4.3).
+
+        Consumed by inventory_service (releases the room) and notification_service
+        (notifies the traveler with the refund amount and ETA).
+        """
+        return await self.publish_event(
+            event_type="booking.cancelled",
+            entity_type="booking",
+            entity_data={
+                "id": booking_id,
+                "user_id": user_id,
+                "room_id": room_id,
+                "hotel_id": hotel_id,
+                "check_in": check_in,
+                "check_out": check_out,
+                "currency": currency,
+                "refund_amount": refund_amount,
+                "refund_percentage": refund_percentage,
+                "refund_status": refund_status,
+            },
+            previous_state={"status": previous_status},
+        )
+
 
 sns_publisher = SNSPublisher()
