@@ -90,6 +90,12 @@ class Payment(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Refund-tracking columns (HU4.3). NULL when the payment was never refunded.
+    # processed_at stays as the original approval timestamp; refunded_at marks
+    # the moment the refund was applied so the timeline of the payment stays
+    # auditable.
+    refund_amount: Mapped[float | None] = mapped_column(DECIMAL(12, 2), nullable=True)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExchangeRate(Base):
