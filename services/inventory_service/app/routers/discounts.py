@@ -9,8 +9,46 @@ from sqlalchemy.orm import joinedload
 from ..database import get_db
 from ..models import Discount, Room, Tariff
 from ..schemas import DiscountCreate, DiscountResponse, DiscountUpdate
+from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/discounts", tags=["inventory"])
+
+
+async def _republish_tariff(tariff: Tariff, db: AsyncSession, is_update: bool = True) -> None:
+    """Recalculate effective price and republish tariff event to SNS."""
+    today = date.today()
+    print(f"[republish] tariff={tariff.id} rate_type={tariff.rate_type} base={tariff.price_per_night}")
+    result = await db.execute(
+        select(Discount).where(
+            Discount.tariff_id == tariff.id,
+            Discount.start_date <= today,
+            Discount.end_date >= today,
+        )
+    )
+    discounts = result.scalars().all()
+    print(f"[republish] active discounts found: {len(discounts)}")
+    base = float(tariff.price_per_night)
+    effective = base
+    for d in discounts:
+        if d.discount_type == "percentage":
+            candidate = base * (1 - float(d.value) / 100)
+        else:
+            candidate = base - float(d.value)
+        effective = min(effective, candidate)
+    effective = max(0.0, effective)
+    print(f"[republish] effective price={effective}, publishing to SNS...")
+
+    await sns_publisher.publish_tariff_upserted(
+        {
+            "id": str(tariff.id),
+            "room_id": str(tariff.room_id),
+            "rate_type": tariff.rate_type,
+            "price_per_night": effective,
+            "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
+            "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
+        },
+        is_update=is_update,
+    )
 
 
 def _compute_status(start_date: date, end_date: date) -> str:
@@ -64,7 +102,8 @@ async def create_discount(
     db: AsyncSession = Depends(get_db),
 ):
     tariff_result = await db.execute(select(Tariff).where(Tariff.id == body.tariff_id))
-    if not tariff_result.scalar_one_or_none():
+    tariff = tariff_result.scalar_one_or_none()
+    if not tariff:
         raise HTTPException(status_code=404, detail="Tariff not found")
 
     discount = Discount(
@@ -78,6 +117,7 @@ async def create_discount(
     db.add(discount)
     await db.commit()
     await db.refresh(discount)
+    await _republish_tariff(tariff, db)
     return _build_discount_response(discount)
 
 
@@ -105,6 +145,10 @@ async def update_discount(
 
     await db.commit()
     await db.refresh(discount)
+    tariff_result = await db.execute(select(Tariff).where(Tariff.id == discount.tariff_id))
+    tariff = tariff_result.scalar_one_or_none()
+    if tariff:
+        await _republish_tariff(tariff, db)
     return _build_discount_response(discount)
 
 
@@ -117,5 +161,9 @@ async def delete_discount(
     discount = result.scalar_one_or_none()
     if not discount:
         raise HTTPException(status_code=404, detail="Discount not found")
+    tariff_result = await db.execute(select(Tariff).where(Tariff.id == discount.tariff_id))
+    tariff = tariff_result.scalar_one_or_none()
     await db.delete(discount)
     await db.commit()
+    if tariff:
+        await _republish_tariff(tariff, db)

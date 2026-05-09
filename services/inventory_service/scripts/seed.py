@@ -5,6 +5,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -183,174 +184,177 @@ async def seed(db_url: str | None = None) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with session_factory() as db:
-        # Check if data already exists
-        result = await db.execute(select(Hotel).limit(1))
-        if result.scalar_one_or_none():
-            print("Database already contains data. Skipping seed.")
-            await engine.dispose()
-            return
+    try:
+        async with session_factory() as db:
+            # Check if data already exists
+            result = await db.execute(select(Hotel).limit(1))
+            if result.scalar_one_or_none():
+                print("Database already contains data. Skipping seed.")
+                return
 
-        sqs_ready = await wait_for_sns()
-        today = date.today()
+            sqs_ready = await wait_for_sns()
+            today = date.today()
 
-        for hotel_data in HOTELS:
-            hotel = Hotel(
-                id=hotel_data["id"],
-                name=hotel_data["name"],
-                description=hotel_data["description"],
-                city=hotel_data["city"],
-                country=hotel_data["country"],
-                rating=hotel_data["rating"],
-                admin_id=hotel_data.get("admin_id"),
-            )
-            db.add(hotel)
-            await db.flush()
-
-            hotel_dict = {
-                "id": str(hotel.id),
-                "name": hotel.name,
-                "description": hotel.description,
-                "city": hotel.city,
-                "country": hotel.country,
-                "rating": hotel.rating,
-            }
-            if sqs_ready:
-                await sns_publisher.publish_hotel_created(hotel_dict)
-
-            for room_data in hotel_data["rooms"]:
-                room = Room(
-                    id=room_data["id"],
-                    hotel_id=hotel.id,
-                    room_type=room_data["room_type"],
-                    room_number=room_data["room_number"],
-                    capacity=room_data["capacity"],
-                    price_per_night=room_data["price_per_night"],
-                    tax_rate=room_data["tax_rate"],
-                    description=room_data["description"],
-                    amenities=room_data["amenities"],
-                    total_quantity=room_data["total_quantity"],
+            for hotel_data in HOTELS:
+                hotel = Hotel(
+                    id=hotel_data["id"],
+                    name=hotel_data["name"],
+                    description=hotel_data["description"],
+                    city=hotel_data["city"],
+                    country=hotel_data["country"],
+                    rating=hotel_data["rating"],
+                    admin_id=hotel_data.get("admin_id"),
                 )
-                db.add(room)
+                db.add(hotel)
                 await db.flush()
 
-                room_dict = {
-                    "id": str(room.id),
-                    "hotel_id": str(room.hotel_id),
-                    "room_type": room.room_type,
-                    "room_number": room.room_number,
-                    "capacity": room.capacity,
-                    "price_per_night": float(room.price_per_night),
-                    "tax_rate": float(room.tax_rate),
-                    "total_quantity": room.total_quantity,
-                    "amenities": room.amenities,
+                hotel_dict = {
+                    "id": str(hotel.id),
+                    "name": hotel.name,
+                    "description": hotel.description,
+                    "city": hotel.city,
+                    "country": hotel.country,
+                    "rating": hotel.rating,
                 }
                 if sqs_ready:
-                    await sns_publisher.publish_room_created(room_dict)
+                    await sns_publisher.publish_hotel_created(hotel_dict)
 
-                # Generate availability for each day
-                for i in range(AVAILABILITY_DAYS):
-                    d = today + timedelta(days=i)
-                    avail = Availability(
-                        room_id=room.id,
-                        date=d,
+                for room_data in hotel_data["rooms"]:
+                    room = Room(
+                        id=room_data["id"],
+                        hotel_id=hotel.id,
+                        room_type=room_data["room_type"],
+                        room_number=room_data["room_number"],
+                        capacity=room_data["capacity"],
+                        price_per_night=room_data["price_per_night"],
+                        tax_rate=room_data["tax_rate"],
+                        description=room_data["description"],
+                        amenities=room_data["amenities"],
                         total_quantity=room_data["total_quantity"],
-                        available_quantity=room_data["total_quantity"],
                     )
-                    db.add(avail)
+                    db.add(room)
+                    await db.flush()
 
-                    if sqs_ready:
-                        await sns_publisher.publish_availability_created(
-                            {
-                                "room_id": str(room.id),
-                                "date": str(d),
-                                "available_quantity": room_data["total_quantity"],
-                            }
-                        )
-
-        # Seed tariffs for Hotel Caribe Plaza
-        tariffs_data = [
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000001"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
-                "rate_type": "standard",
-                "price_per_night": 350000,
-                "start_date": None,
-                "end_date": None,
-            },
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000002"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
-                "rate_type": "weekend",
-                "price_per_night": 420000,
-                "start_date": None,
-                "end_date": None,
-            },
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000003"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"),
-                "rate_type": "standard",
-                "price_per_night": 500000,
-                "start_date": None,
-                "end_date": None,
-            },
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000004"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"),
-                "rate_type": "weekend",
-                "price_per_night": 600000,
-                "start_date": None,
-                "end_date": None,
-            },
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000005"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"),
-                "rate_type": "standard",
-                "price_per_night": 850000,
-                "start_date": None,
-                "end_date": None,
-            },
-            {
-                "id": uuid.UUID("c1000000-0000-0000-0000-000000000006"),
-                "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"),
-                "rate_type": "season",
-                "price_per_night": 1100000,
-                "start_date": date(2026, 12, 20),
-                "end_date": date(2027, 1, 10),
-            },
-        ]
-        for t in tariffs_data:
-            db.add(
-                Tariff(
-                    id=t["id"],
-                    room_id=t["room_id"],
-                    rate_type=t["rate_type"],
-                    price_per_night=t["price_per_night"],
-                    start_date=t["start_date"],
-                    end_date=t["end_date"],
-                )
-            )
-            if sqs_ready:
-                await sns_publisher.publish_tariff_upserted(
-                    {
-                        "id": str(t["id"]),
-                        "room_id": str(t["room_id"]),
-                        "rate_type": t["rate_type"],
-                        "price_per_night": float(t["price_per_night"]),
-                        "start_date": t["start_date"].isoformat() if t["start_date"] else None,
-                        "end_date": t["end_date"].isoformat() if t["end_date"] else None,
+                    room_dict = {
+                        "id": str(room.id),
+                        "hotel_id": str(room.hotel_id),
+                        "room_type": room.room_type,
+                        "room_number": room.room_number,
+                        "capacity": room.capacity,
+                        "price_per_night": float(room.price_per_night),
+                        "tax_rate": float(room.tax_rate),
+                        "total_quantity": room.total_quantity,
+                        "amenities": room.amenities,
                     }
+                    if sqs_ready:
+                        await sns_publisher.publish_room_created(room_dict)
+
+                    # Generate availability for each day
+                    for i in range(AVAILABILITY_DAYS):
+                        d = today + timedelta(days=i)
+                        avail = Availability(
+                            room_id=room.id,
+                            date=d,
+                            total_quantity=room_data["total_quantity"],
+                            available_quantity=room_data["total_quantity"],
+                        )
+                        db.add(avail)
+
+                        if sqs_ready:
+                            await sns_publisher.publish_availability_created(
+                                {
+                                    "room_id": str(room.id),
+                                    "date": str(d),
+                                    "available_quantity": room_data["total_quantity"],
+                                }
+                            )
+
+            # Seed tariffs for Hotel Caribe Plaza
+            tariffs_data = [
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000001"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
+                    "rate_type": "standard",
+                    "price_per_night": 350000,
+                    "start_date": None,
+                    "end_date": None,
+                },
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000002"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
+                    "rate_type": "weekend",
+                    "price_per_night": 420000,
+                    "start_date": None,
+                    "end_date": None,
+                },
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000003"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"),
+                    "rate_type": "standard",
+                    "price_per_night": 500000,
+                    "start_date": None,
+                    "end_date": None,
+                },
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000004"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000002"),
+                    "rate_type": "weekend",
+                    "price_per_night": 600000,
+                    "start_date": None,
+                    "end_date": None,
+                },
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000005"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"),
+                    "rate_type": "standard",
+                    "price_per_night": 850000,
+                    "start_date": None,
+                    "end_date": None,
+                },
+                {
+                    "id": uuid.UUID("c1000000-0000-0000-0000-000000000006"),
+                    "room_id": uuid.UUID("b1000000-0000-0000-0000-000000000003"),
+                    "rate_type": "season",
+                    "price_per_night": 1100000,
+                    "start_date": date(2026, 12, 20),
+                    "end_date": date(2027, 1, 10),
+                },
+            ]
+            for t in tariffs_data:
+                db.add(
+                    Tariff(
+                        id=t["id"],
+                        room_id=t["room_id"],
+                        rate_type=t["rate_type"],
+                        price_per_night=t["price_per_night"],
+                        start_date=t["start_date"],
+                        end_date=t["end_date"],
+                    )
                 )
+                if sqs_ready:
+                    await sns_publisher.publish_tariff_upserted(
+                        {
+                            "id": str(t["id"]),
+                            "room_id": str(t["room_id"]),
+                            "rate_type": t["rate_type"],
+                            "price_per_night": float(t["price_per_night"]),
+                            "start_date": t["start_date"].isoformat() if t["start_date"] else None,
+                            "end_date": t["end_date"].isoformat() if t["end_date"] else None,
+                        }
+                    )
 
-        await db.commit()
-        print(
-            f"Seed complete: {len(HOTELS)} hotels, "
-            f"{sum(len(h['rooms']) for h in HOTELS)} rooms, "
-            f"{AVAILABILITY_DAYS} days of availability each, "
-            f"{len(tariffs_data)} tariffs."
-        )
-
-    await engine.dispose()
+            await db.commit()
+            print(
+                f"Seed complete: {len(HOTELS)} hotels, "
+                f"{sum(len(h['rooms']) for h in HOTELS)} rooms, "
+                f"{AVAILABILITY_DAYS} days of availability each, "
+                f"{len(tariffs_data)} tariffs."
+            )
+    except IntegrityError:
+        # Another pod seeded concurrently — data already present, nothing to do.
+        print("Seed skipped: data already inserted by another instance.")
+    finally:
+        await engine.dispose()
 
 
 if __name__ == "__main__":
