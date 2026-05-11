@@ -33,3 +33,18 @@ class RefundAmountInvalidError(Exception):
 
     def __init__(self, message: str):
         super().__init__(message)
+
+
+class FraudAlertNotFoundError(Exception):
+    def __init__(self, alert_id: str):
+        self.alert_id = alert_id
+        super().__init__(f"Fraud alert {alert_id} not found")
+
+
+class FraudAlertAlreadyReviewedError(Exception):
+    def __init__(self, alert_id: str, current_status: str):
+        self.alert_id = alert_id
+        self.current_status = current_status
+        super().__init__(
+            f"Fraud alert {alert_id} has already been reviewed (status={current_status})"
+        )

@@ -454,3 +454,112 @@ class TestBookingCancelledHandler:
             assert kwargs["extra_data"]["refund_status"] == "processed"
             assert kwargs["extra_data"]["refund_amount"] == "62000"
             assert kwargs["extra_data"]["currency"] == "COP"
+
+
+# ---------------------------------------------------------------------------
+# HU4.7 — fraud_detected handler
+# ---------------------------------------------------------------------------
+
+
+def _make_fraud_event(
+    *,
+    alert_type: str = "duplicate",
+    alert_id: str | None = None,
+    payment_id: str | None = None,
+    user_id: str | None = None,
+    amount: float = 250000.0,
+    currency: str = "COP",
+    triggered_reason: str = "Duplicate transaction within 300s",
+    severity: str = "high",
+) -> str:
+    return json.dumps(
+        {
+            "event_id": str(uuid.uuid4()),
+            "event_type": "fraud_detected",
+            "entity_type": "fraud_alert",
+            "timestamp": "2026-04-30T12:00:00",
+            "data": {
+                "fraud_alert": {
+                    "alert_id": alert_id or str(uuid.uuid4()),
+                    "payment_id": payment_id or str(uuid.uuid4()),
+                    "user_id": user_id or str(uuid.uuid4()),
+                    "amount": amount,
+                    "currency": currency,
+                    "alert_type": alert_type,
+                    "severity": severity,
+                    "triggered_reason": triggered_reason,
+                }
+            },
+        }
+    )
+
+
+class TestFraudDetectedHandler:
+    async def test_logs_warning_and_skips_email_when_admin_email_not_set(self, consumer):
+        event = _make_fraud_event()
+        with patch("app.services.sqs_consumer.settings") as mock_settings, patch(
+            "app.services.sqs_consumer.email_service", new_callable=MagicMock
+        ) as mock_email:
+            mock_settings.fraud_admin_email = None
+            mock_email.send_email = AsyncMock(return_value=True)
+
+            assert (await consumer.process_message(event)) is True
+            mock_email.send_email.assert_not_called()
+
+    async def test_sends_email_when_admin_email_is_configured(self, consumer):
+        event = _make_fraud_event(alert_type="velocity")
+        with patch("app.services.sqs_consumer.settings") as mock_settings, patch(
+            "app.services.sqs_consumer.email_service", new_callable=MagicMock
+        ) as mock_email:
+            mock_settings.fraud_admin_email = "ops@travelhub.com"
+            mock_email.send_email = AsyncMock(return_value=True)
+
+            assert (await consumer.process_message(event)) is True
+            mock_email.send_email.assert_awaited_once()
+            kwargs = mock_email.send_email.call_args.kwargs
+            assert kwargs["to"] == "ops@travelhub.com"
+            assert "fraude" in kwargs["subject"].lower()
+            assert "velocity" in kwargs["html_body"].lower()
+
+    async def test_missing_required_fields_returns_false(self, consumer):
+        """Without alert_id or payment_id the message goes back to the queue."""
+        event = json.dumps(
+            {
+                "event_type": "fraud_detected",
+                "entity_type": "fraud_alert",
+                "data": {"fraud_alert": {"alert_type": "duplicate"}},
+            }
+        )
+        with patch("app.services.sqs_consumer.settings") as mock_settings:
+            mock_settings.fraud_admin_email = None
+            assert (await consumer.process_message(event)) is False
+
+    async def test_email_failure_still_returns_true(self, consumer):
+        """Email is best-effort; SQS must not retry on transport failure."""
+        event = _make_fraud_event()
+        with patch("app.services.sqs_consumer.settings") as mock_settings, patch(
+            "app.services.sqs_consumer.email_service", new_callable=MagicMock
+        ) as mock_email:
+            mock_settings.fraud_admin_email = "ops@travelhub.com"
+            mock_email.send_email = AsyncMock(return_value=False)
+
+            assert (await consumer.process_message(event)) is True
+            mock_email.send_email.assert_awaited_once()
+
+    async def test_fraud_event_does_not_touch_booking_handlers(self, consumer):
+        """Make sure the new dispatch branch doesn't fall into the booking path."""
+        event = _make_fraud_event()
+        with patch.object(
+            consumer, "_handle_booking_status_updated", new=AsyncMock()
+        ) as booking_status_updated_mock, patch.object(
+            consumer, "_handle_booking_created", new=AsyncMock()
+        ) as booking_created_mock, patch.object(
+            consumer, "_handle_booking_cancelled", new=AsyncMock()
+        ) as booking_cancelled_mock, patch(
+            "app.services.sqs_consumer.settings"
+        ) as mock_settings:
+            mock_settings.fraud_admin_email = None
+            assert (await consumer.process_message(event)) is True
+            booking_status_updated_mock.assert_not_called()
+            booking_created_mock.assert_not_called()
+            booking_cancelled_mock.assert_not_called()

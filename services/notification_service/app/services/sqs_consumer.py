@@ -16,7 +16,11 @@ from .data_enrichment import get_booking_info, get_payment_info, get_user_info
 from .email_builder import build_payment_confirmation_email
 from .email_service import email_service
 from .expo_push import expo_push_service
-from .notification_builder import build_booking_notification, build_cancellation_refund_notification
+from .notification_builder import (
+    build_booking_notification,
+    build_cancellation_refund_notification,
+    build_fraud_alert_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -306,12 +310,62 @@ class SQSConsumer:
             )
             return True
 
+    async def _handle_fraud_detected(self, alert_data: dict) -> bool:
+        """Handle fraud_detected events — surface the alert to the system admin (HU4.7 CA4).
+
+        The notification channels are:
+        - WARN log (always, so ops can grep)
+        - Email to `settings.fraud_admin_email` (if configured)
+
+        We deliberately do NOT persist into ``notification_history`` because
+        that table is bound to a booking_id and a fraud alert is raised
+        before any booking exists. The alert itself lives in payment_service's
+        ``fraud_alerts`` table — that's the system of record.
+        """
+        alert_id = alert_data.get("alert_id")
+        payment_id = alert_data.get("payment_id")
+        alert_type = alert_data.get("alert_type")
+
+        if not alert_id or not payment_id or not alert_type:
+            logger.error("Missing required fields in fraud_detected event")
+            return False
+
+        logger.warning(
+            "FRAUD ALERT: type=%s alert_id=%s payment_id=%s reason=%s",
+            alert_type,
+            alert_id,
+            payment_id,
+            alert_data.get("triggered_reason"),
+        )
+
+        if not settings.fraud_admin_email:
+            logger.info("fraud_admin_email not configured — skipping email channel")
+            return True
+
+        email = build_fraud_alert_email(alert_data)
+        delivered = await email_service.send_email(
+            to=settings.fraud_admin_email,
+            subject=email["subject"],
+            html_body=email["html"],
+        )
+        if not delivered:
+            logger.error("Failed to email fraud alert %s to admin", alert_id)
+            # Do not retry the SQS message: the log + DB alert are enough for
+            # ops to recover; re-emailing on every retry would spam.
+        return True
+
     async def process_message(self, message_body: str) -> bool:
         """Process a single SQS message by dispatching to the appropriate handler."""
         try:
             event = json.loads(message_body)
             event_type = event.get("event_type")
             entity_type = event.get("entity_type")
+
+            # Fraud alerts come on a separate entity_type — handle them first
+            # so they don't fall into the booking-only branch below.
+            if entity_type == "fraud_alert" and event_type == "fraud_detected":
+                alert_data = event.get("data", {}).get("fraud_alert", {})
+                return await self._handle_fraud_detected(alert_data)
 
             if entity_type != "booking":
                 logger.debug(f"Skipping non-booking event: {entity_type}")

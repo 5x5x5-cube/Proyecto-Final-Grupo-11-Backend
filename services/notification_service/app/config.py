@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     payment_service_url: str = "http://localhost:8009"
     inventory_service_url: str = "http://localhost:8006"
 
+    # Fraud alerts (HU4.7) — email address that receives fraud_detected
+    # notifications. Leave empty to skip the email channel and rely on logs
+    # + the payment_service /fraud-alerts endpoints instead.
+    fraud_admin_email: Optional[str] = None
+
     model_config = SettingsConfigDict(env_file=".env")
 
 
