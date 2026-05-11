@@ -14,7 +14,8 @@ from ..exceptions import (
     RefundAmountInvalidError,
     TokenExpiredError,
 )
-from ..models import ExchangeRate, Payment, PaymentToken, UserPaymentMethod
+from ..models import ExchangeRate, FraudAlert, Payment, PaymentToken, UserPaymentMethod
+from ..redis_client import get_redis
 from ..schemas import (
     InitiatePaymentRequest,
     PaymentAdminListItem,
@@ -26,7 +27,9 @@ from ..schemas import (
     RefundResponse,
 )
 from . import cart_client, payment_adapter
+from .fraud_detector import evaluate_transaction, record_transaction
 from .notification_service import notify_payment_confirmed, notify_payment_declined
+from .sns_publisher import sns_publisher
 
 
 def _build_method_response(pm: UserPaymentMethod) -> PaymentMethodResponse:
@@ -157,7 +160,26 @@ async def initiate_payment(
     await db.refresh(payment)
     await db.refresh(payment_method)
 
-    # 5. Submit to gateway for async processing (HTTP call, returns immediately)
+    # 5. Fraud detection (HU4.7) — runs before the gateway call so suspicious
+    #    transactions never reach the processor. State lives in Redis so the
+    #    check is fast (one or two ZSET ops + one GET).
+    redis = await get_redis()
+    fraud_result = await evaluate_transaction(
+        redis, user_id, float(payment.amount), payment_method.id
+    )
+    if fraud_result is not None:
+        return await _block_payment_for_fraud(
+            db=db,
+            payment=payment,
+            payment_method=payment_method,
+            fraud_result=fraud_result,
+        )
+
+    # Clean transaction — record it in Redis so future duplicate/velocity
+    # checks see it, then continue with the normal gateway flow.
+    await record_transaction(redis, user_id, float(payment.amount), payment_method.id)
+
+    # 6. Submit to gateway for async processing (HTTP call, returns immediately)
     webhook_url = f"{settings.payment_service_url}/api/v1/payments/{payment.id}/confirmation"
 
     await payment_adapter.submit_to_gateway(
@@ -169,6 +191,55 @@ async def initiate_payment(
     )
 
     return _build_payment_response(payment, payment_method)
+
+
+async def _block_payment_for_fraud(
+    db: AsyncSession,
+    payment: Payment,
+    payment_method: UserPaymentMethod,
+    fraud_result,
+) -> PaymentResponse:
+    """Mark the payment as blocked, persist a FraudAlert row and publish the
+    fraud_detected event. Gateway is *not* invoked.
+
+    The SNS publish is fire-and-forget: a downstream failure must not undo the
+    block (the payment is already safely in `blocked_fraud_review`).
+    """
+    alert = FraudAlert(
+        id=uuid.uuid4(),
+        payment_id=payment.id,
+        user_id=payment.user_id,
+        alert_type=fraud_result.alert_type,
+        severity=fraud_result.severity,
+        triggered_reason=fraud_result.triggered_reason,
+        status="pending",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(alert)
+    payment.status = "blocked_fraud_review"
+    await db.commit()
+    await db.refresh(payment)
+    await db.refresh(alert)
+
+    try:
+        await sns_publisher.publish_fraud_detected(
+            {
+                "alert_id": str(alert.id),
+                "payment_id": str(payment.id),
+                "user_id": str(payment.user_id),
+                "amount": float(payment.amount),
+                "currency": payment.currency,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "triggered_reason": alert.triggered_reason,
+            }
+        )
+    except Exception:  # noqa: BLE001 — fire-and-forget; do not roll back the block
+        pass
+
+    return _build_payment_response(
+        payment, payment_method, message=f"Blocked by fraud rule: {alert.alert_type}"
+    )
 
 
 async def confirm_payment(

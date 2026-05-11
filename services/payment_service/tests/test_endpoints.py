@@ -191,6 +191,9 @@ class TestTokenizeEndpoint:
 
 
 class TestInitiateEndpoint:
+    @patch("app.services.payment_service.record_transaction", new=AsyncMock())
+    @patch("app.services.payment_service.evaluate_transaction", new=AsyncMock(return_value=None))
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
     @patch("app.services.payment_service.payment_adapter")
     @patch("app.services.payment_service.cart_client")
     async def test_initiate_returns_processing(self, mock_cart, mock_adapter):
@@ -240,6 +243,9 @@ class TestInitiateEndpoint:
         finally:
             app.dependency_overrides.clear()
 
+    @patch("app.services.payment_service.record_transaction", new=AsyncMock())
+    @patch("app.services.payment_service.evaluate_transaction", new=AsyncMock(return_value=None))
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
     @patch("app.services.payment_service.payment_adapter")
     @patch("app.services.payment_service.cart_client")
     async def test_initiate_decline_card_still_returns_processing(self, mock_cart, mock_adapter):
@@ -818,6 +824,189 @@ class TestAdminExportPayments:
                 )
 
             assert response.status_code == 200
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Fraud detection wired into initiate_payment (HU4.7)
+# ---------------------------------------------------------------------------
+
+
+class TestInitiateFraudDetection:
+    """When fraud_detector flags a transaction, the gateway is bypassed and the
+    payment is marked blocked_fraud_review (HU4.7 CA1-CA4)."""
+
+    def _setup_db_for_initiate(self, token):
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = token
+        db.execute = AsyncMock(return_value=mock_result)
+
+        async def fake_refresh(obj):
+            if hasattr(obj, "id") and obj.id is None:
+                obj.id = uuid.uuid4()
+            if hasattr(obj, "created_at") and obj.created_at is None:
+                obj.created_at = datetime.now(timezone.utc)
+
+        db.refresh = AsyncMock(side_effect=fake_refresh)
+        return db
+
+    @patch("app.services.payment_service.sns_publisher")
+    @patch("app.services.payment_service.record_transaction", new=AsyncMock())
+    @patch("app.services.payment_service.evaluate_transaction")
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
+    @patch("app.services.payment_service.payment_adapter")
+    @patch("app.services.payment_service.cart_client")
+    async def test_duplicate_blocks_payment_and_skips_gateway(
+        self, mock_cart, mock_adapter, mock_evaluate, mock_sns
+    ):
+        from app.services.fraud_detector import FraudResult
+
+        token = _make_token("4242424242424242")
+        db = self._setup_db_for_initiate(token)
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        mock_evaluate.return_value = FraudResult(
+            alert_type="duplicate",
+            triggered_reason="Duplicate transaction within 300s",
+        )
+        mock_sns.publish_fraud_detected = AsyncMock(return_value=True)
+        mock_adapter.submit_to_gateway = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={"token": token.token, "cartId": str(CART_ID), "method": "credit_card"},
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "blocked_fraud_review"
+            assert "duplicate" in data["message"].lower()
+            # Gateway must NOT be called when fraud is detected
+            mock_adapter.submit_to_gateway.assert_not_called()
+            # SNS event must be published with the alert payload
+            mock_sns.publish_fraud_detected.assert_awaited_once()
+            payload = mock_sns.publish_fraud_detected.call_args.args[0]
+            assert payload["alert_type"] == "duplicate"
+            assert payload["user_id"] == str(USER_ID)
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.services.payment_service.sns_publisher")
+    @patch("app.services.payment_service.record_transaction", new=AsyncMock())
+    @patch("app.services.payment_service.evaluate_transaction")
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
+    @patch("app.services.payment_service.payment_adapter")
+    @patch("app.services.payment_service.cart_client")
+    async def test_velocity_blocks_payment(self, mock_cart, mock_adapter, mock_evaluate, mock_sns):
+        from app.services.fraud_detector import FraudResult
+
+        token = _make_token("4242424242424242")
+        db = self._setup_db_for_initiate(token)
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        mock_evaluate.return_value = FraudResult(
+            alert_type="velocity",
+            triggered_reason="More than 5 transactions within 600s for the same user",
+        )
+        mock_sns.publish_fraud_detected = AsyncMock(return_value=True)
+        mock_adapter.submit_to_gateway = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={"token": token.token, "cartId": str(CART_ID), "method": "credit_card"},
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            data = response.json()
+            assert data["status"] == "blocked_fraud_review"
+            assert "velocity" in data["message"].lower()
+            mock_adapter.submit_to_gateway.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.services.payment_service.sns_publisher")
+    @patch("app.services.payment_service.record_transaction")
+    @patch("app.services.payment_service.evaluate_transaction")
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
+    @patch("app.services.payment_service.payment_adapter")
+    @patch("app.services.payment_service.cart_client")
+    async def test_clean_transaction_records_and_calls_gateway(
+        self, mock_cart, mock_adapter, mock_evaluate, mock_record, mock_sns
+    ):
+        """Inverse path — make sure the clean flow still wires through correctly."""
+        token = _make_token("4242424242424242")
+        db = self._setup_db_for_initiate(token)
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        mock_evaluate.return_value = None  # clean
+        mock_record.return_value = None
+        mock_sns.publish_fraud_detected = AsyncMock()
+        mock_adapter.submit_to_gateway = AsyncMock(
+            return_value=MagicMock(transaction_id="txn_mock", status="pending")
+        )
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={"token": token.token, "cartId": str(CART_ID), "method": "credit_card"},
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 202
+            data = response.json()
+            assert data["status"] == "processing"
+            mock_record.assert_awaited_once()
+            mock_adapter.submit_to_gateway.assert_awaited_once()
+            mock_sns.publish_fraud_detected.assert_not_called()
+        finally:
+            app.dependency_overrides.clear()
+
+    @patch("app.services.payment_service.sns_publisher")
+    @patch("app.services.payment_service.record_transaction", new=AsyncMock())
+    @patch("app.services.payment_service.evaluate_transaction")
+    @patch("app.services.payment_service.get_redis", new=AsyncMock(return_value=AsyncMock()))
+    @patch("app.services.payment_service.payment_adapter")
+    @patch("app.services.payment_service.cart_client")
+    async def test_sns_failure_does_not_unblock_the_payment(
+        self, mock_cart, mock_adapter, mock_evaluate, mock_sns
+    ):
+        """If SNS fan-out fails, the payment must stay blocked (safer default)."""
+        from app.services.fraud_detector import FraudResult
+
+        token = _make_token("4242424242424242")
+        db = self._setup_db_for_initiate(token)
+        mock_cart.get_cart = AsyncMock(return_value=MOCK_CART)
+        mock_evaluate.return_value = FraudResult(
+            alert_type="duplicate",
+            triggered_reason="dup",
+        )
+        mock_sns.publish_fraud_detected = AsyncMock(side_effect=RuntimeError("sns down"))
+        mock_adapter.submit_to_gateway = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/v1/payments/initiate",
+                    json={"token": token.token, "cartId": str(CART_ID), "method": "credit_card"},
+                    headers={"X-User-Id": str(USER_ID)},
+                )
+
+            assert response.status_code == 202
+            assert response.json()["status"] == "blocked_fraud_review"
+            mock_adapter.submit_to_gateway.assert_not_called()
         finally:
             app.dependency_overrides.clear()
 
