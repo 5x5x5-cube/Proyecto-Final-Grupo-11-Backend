@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..exceptions import (
+    FraudAlertAlreadyReviewedError,
+    FraudAlertNotFoundError,
     InvalidTokenError,
     PaymentNotFoundError,
     PaymentNotRefundableError,
@@ -20,6 +22,10 @@ from ..exceptions import (
 from ..models import ExchangeRate
 from ..schemas import (
     ExchangeRateResponse,
+    FraudAlertItem,
+    FraudAlertListResponse,
+    FraudAlertReviewRequest,
+    FraudAlertSummary,
     InitiatePaymentRequest,
     PaymentAdminListResponse,
     PaymentAdminSummary,
@@ -31,11 +37,14 @@ from ..schemas import (
 from ..services.cart_client import CartExpiredError, CartNotFoundError
 from ..services.payment_service import confirm_payment
 from ..services.payment_service import export_payments_csv as export_payments_csv_svc
+from ..services.payment_service import get_fraud_alerts_summary as get_fraud_alerts_summary_svc
 from ..services.payment_service import get_payment as get_payment_svc
 from ..services.payment_service import get_payments_summary as get_payments_summary_svc
 from ..services.payment_service import initiate_payment
+from ..services.payment_service import list_fraud_alerts as list_fraud_alerts_svc
 from ..services.payment_service import list_payments as list_payments_svc
 from ..services.payment_service import refund_payment as refund_payment_svc
+from ..services.payment_service import review_fraud_alert as review_fraud_alert_svc
 
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
@@ -182,6 +191,73 @@ async def export_payments_endpoint(
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
     )
+
+
+# ─── Fraud alerts admin endpoints (HU4.7) ───────────────────────────────────
+
+
+@router.get("/fraud-alerts/summary", response_model=FraudAlertSummary)
+async def fraud_alerts_summary_endpoint(
+    date_from: datetime | None = Query(None, alias="dateFrom"),
+    date_to: datetime | None = Query(None, alias="dateTo"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregated fraud-alert metrics for the admin dashboard."""
+    return await get_fraud_alerts_summary_svc(db=db, date_from=date_from, date_to=date_to)
+
+
+@router.get("/fraud-alerts", response_model=FraudAlertListResponse)
+async def list_fraud_alerts_endpoint(
+    alert_type: str | None = Query(None, alias="alertType"),
+    status: str | None = Query(None),
+    date_from: datetime | None = Query(None, alias="dateFrom"),
+    date_to: datetime | None = Query(None, alias="dateTo"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, alias="pageSize", ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list fraud alerts with filters and pagination.
+
+    Query params (all optional):
+      - alertType: duplicate | velocity | threed_secure_failed
+      - status: pending | approved | confirmed_block
+      - dateFrom, dateTo: ISO datetimes filtering by FraudAlert.created_at
+      - page (>=1), pageSize (1-100)
+    """
+    return await list_fraud_alerts_svc(
+        db=db,
+        alert_type=alert_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post("/fraud-alerts/{alert_id}/review", response_model=FraudAlertItem)
+async def review_fraud_alert_endpoint(
+    alert_id: uuid.UUID,
+    request: FraudAlertReviewRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin manual review of a pending alert (HU4.7 CA6).
+
+    `action=approve` → alert marked approved AND linked payment is moved
+    back to 'processing' so the user can retry. (Note: the gateway token
+    likely expired, so the user must re-initiate from the cart.)
+
+    `action=confirm_block` → alert marked confirmed_block, payment stays
+    in 'blocked_fraud_review'.
+
+    Re-reviewing an already-decided alert returns 409.
+    """
+    try:
+        return await review_fraud_alert_svc(db=db, alert_id=alert_id, request=request)
+    except FraudAlertNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except FraudAlertAlreadyReviewedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.post("/{payment_id}/refund", response_model=RefundResponse, status_code=200)

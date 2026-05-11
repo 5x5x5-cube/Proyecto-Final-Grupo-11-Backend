@@ -1177,6 +1177,277 @@ class TestRefundEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# Fraud-alerts admin endpoints (HU4.7)
+# ---------------------------------------------------------------------------
+
+
+def _make_fraud_alert(
+    alert_id: uuid.UUID | None = None,
+    payment_id: uuid.UUID | None = None,
+    alert_type: str = "duplicate",
+    status: str = "pending",
+):
+    from app.models import FraudAlert
+
+    return FraudAlert(
+        id=alert_id or uuid.uuid4(),
+        payment_id=payment_id or uuid.uuid4(),
+        user_id=USER_ID,
+        alert_type=alert_type,
+        severity="high",
+        triggered_reason="Test reason",
+        status=status,
+        notes=None,
+        reviewed_by=None,
+        reviewed_at=None,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+class TestListFraudAlerts:
+    """GET /api/v1/payments/fraud-alerts — admin listing."""
+
+    def _setup_db(self, *, total: int, items: list):
+        db = AsyncMock()
+        count_result = MagicMock()
+        count_result.scalar.return_value = total
+        list_result = MagicMock()
+        list_result.scalars.return_value.all.return_value = items
+        db.execute = AsyncMock(side_effect=[count_result, list_result])
+        return db
+
+    async def test_list_returns_paginated_alerts(self):
+        a1 = _make_fraud_alert(alert_type="duplicate", status="pending")
+        a2 = _make_fraud_alert(alert_type="velocity", status="approved")
+        db = self._setup_db(total=2, items=[a1, a2])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/fraud-alerts")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 2
+            assert data["page"] == 1
+            assert data["pageSize"] == 20
+            assert len(data["items"]) == 2
+            assert {it["alertType"] for it in data["items"]} == {"duplicate", "velocity"}
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_empty_returns_zero_total_pages(self):
+        db = self._setup_db(total=0, items=[])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/fraud-alerts?status=pending")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 0
+            assert data["totalPages"] == 0
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_list_accepts_combined_filters(self):
+        db = self._setup_db(total=1, items=[_make_fraud_alert()])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get(
+                    "/api/v1/payments/fraud-alerts"
+                    "?alertType=duplicate&status=pending"
+                    "&dateFrom=2026-01-01T00:00:00&dateTo=2026-12-31T23:59:59"
+                    "&page=1&pageSize=10"
+                )
+            assert response.status_code == 200
+        finally:
+            app.dependency_overrides.clear()
+
+
+class TestReviewFraudAlert:
+    """POST /api/v1/payments/fraud-alerts/{id}/review."""
+
+    async def test_approve_unblocks_the_payment(self):
+        alert = _make_fraud_alert(status="pending")
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="blocked_fraud_review")
+        payment.id = alert.payment_id
+
+        # First execute: fetch the alert; second: fetch the payment
+        db = AsyncMock()
+        alert_result = MagicMock()
+        alert_result.scalar_one_or_none.return_value = alert
+        payment_result = MagicMock()
+        payment_result.scalar_one_or_none.return_value = payment
+        db.execute = AsyncMock(side_effect=[alert_result, payment_result])
+        db.refresh = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/fraud-alerts/{alert.id}/review",
+                    json={"action": "approve", "notes": "Looks legit"},
+                )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "approved"
+            assert data["notes"] == "Looks legit"
+            # The linked payment was moved back to processing
+            assert payment.status == "processing"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_confirm_block_leaves_payment_blocked(self):
+        alert = _make_fraud_alert(status="pending")
+        token = _make_token()
+        pm = _make_payment_method(token)
+        payment = _make_payment(pm, status="blocked_fraud_review")
+        payment.id = alert.payment_id
+
+        db = AsyncMock()
+        alert_result = MagicMock()
+        alert_result.scalar_one_or_none.return_value = alert
+        # confirm_block path should NOT fetch the payment
+        db.execute = AsyncMock(side_effect=[alert_result])
+        db.refresh = AsyncMock()
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/fraud-alerts/{alert.id}/review",
+                    json={"action": "confirm_block"},
+                )
+            assert response.status_code == 200
+            assert response.json()["status"] == "confirmed_block"
+            # Payment was untouched (we never selected it)
+            assert payment.status == "blocked_fraud_review"
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_unknown_alert_returns_404(self):
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/fraud-alerts/{uuid.uuid4()}/review",
+                    json={"action": "approve"},
+                )
+            assert response.status_code == 404
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_already_reviewed_returns_409(self):
+        already = _make_fraud_alert(status="approved")
+        db = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = already
+        db.execute = AsyncMock(return_value=result)
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    f"/api/v1/payments/fraud-alerts/{already.id}/review",
+                    json={"action": "confirm_block"},
+                )
+            assert response.status_code == 409
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_invalid_action_returns_422(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                f"/api/v1/payments/fraud-alerts/{uuid.uuid4()}/review",
+                json={"action": "bogus"},
+            )
+        assert response.status_code == 422
+
+
+class TestFraudAlertsSummary:
+    """GET /api/v1/payments/fraud-alerts/summary."""
+
+    def _row(self, key: str, count: int):
+        # The service expects attributes `.status` / `.alert_type` and `.count`
+        row = MagicMock()
+        row.status = key
+        row.alert_type = key
+        row.count = count
+        return row
+
+    async def test_summary_aggregates_by_status_and_type(self):
+        # First execute call → status counts
+        status_result = MagicMock()
+        status_result.all.return_value = [
+            self._row("pending", 4),
+            self._row("approved", 1),
+            self._row("confirmed_block", 2),
+        ]
+        # Second execute call → per-type counts
+        type_result = MagicMock()
+        type_result.all.return_value = [
+            self._row("duplicate", 3),
+            self._row("velocity", 2),
+            self._row("threed_secure_failed", 2),
+        ]
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=[status_result, type_result])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/fraud-alerts/summary")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 7
+            assert data["pending"] == 4
+            assert data["approved"] == 1
+            assert data["confirmedBlock"] == 2
+            assert data["byType"]["duplicate"] == 3
+            assert data["byType"]["velocity"] == 2
+        finally:
+            app.dependency_overrides.clear()
+
+    async def test_summary_empty_returns_zeros(self):
+        empty = MagicMock()
+        empty.all.return_value = []
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=[empty, empty])
+
+        app.dependency_overrides[get_db] = _override_db(db)
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/api/v1/payments/fraud-alerts/summary")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] == 0
+            assert data["pending"] == 0
+            assert data["byType"] == {}
+        finally:
+            app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
 # Model security
 # ---------------------------------------------------------------------------
 

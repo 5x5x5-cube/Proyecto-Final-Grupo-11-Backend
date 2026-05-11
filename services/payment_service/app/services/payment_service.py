@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..exceptions import (
+    FraudAlertAlreadyReviewedError,
+    FraudAlertNotFoundError,
     InvalidTokenError,
     PaymentNotFoundError,
     PaymentNotRefundableError,
@@ -17,6 +19,10 @@ from ..exceptions import (
 from ..models import ExchangeRate, FraudAlert, Payment, PaymentToken, UserPaymentMethod
 from ..redis_client import get_redis
 from ..schemas import (
+    FraudAlertItem,
+    FraudAlertListResponse,
+    FraudAlertReviewRequest,
+    FraudAlertSummary,
     InitiatePaymentRequest,
     PaymentAdminListItem,
     PaymentAdminListResponse,
@@ -529,6 +535,167 @@ async def refund_payment(
         refund_amount=float(payment.refund_amount or 0),
         refunded_at=payment.refunded_at or now,
         reason=reason,
+    )
+
+
+# ── Fraud-alerts admin operations (HU4.7) ──
+
+
+async def list_fraud_alerts(
+    db: AsyncSession,
+    *,
+    alert_type: str | None = None,
+    status: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> FraudAlertListResponse:
+    """List fraud alerts with optional filters and pagination."""
+    conditions: list = []
+    if alert_type:
+        conditions.append(FraudAlert.alert_type == alert_type)
+    if status:
+        conditions.append(FraudAlert.status == status)
+    if date_from is not None:
+        conditions.append(FraudAlert.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(FraudAlert.created_at <= date_to)
+
+    base_select = select(FraudAlert)
+    count_select = select(func.count(FraudAlert.id))
+    if conditions:
+        where_clause = and_(*conditions)
+        base_select = base_select.where(where_clause)
+        count_select = count_select.where(where_clause)
+
+    total_result = await db.execute(count_select)
+    total = total_result.scalar() or 0
+
+    paged = (
+        base_select.order_by(FraudAlert.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await db.execute(paged)).scalars().all()
+
+    items = [
+        FraudAlertItem(
+            id=row.id,
+            payment_id=row.payment_id,
+            user_id=row.user_id,
+            alert_type=row.alert_type,
+            severity=row.severity,
+            triggered_reason=row.triggered_reason,
+            status=row.status,
+            notes=row.notes,
+            reviewed_by=row.reviewed_by,
+            reviewed_at=row.reviewed_at,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return FraudAlertListResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
+    )
+
+
+async def review_fraud_alert(
+    db: AsyncSession,
+    alert_id: uuid.UUID,
+    request: FraudAlertReviewRequest,
+) -> FraudAlertItem:
+    """Approve or confirm-block a pending fraud alert (HU4.7 CA6).
+
+    - approve       → alert.status='approved', the linked payment is unblocked
+                       back to 'processing' so the user can retry.
+    - confirm_block → alert.status='confirmed_block', payment stays blocked.
+
+    A re-review of an already-decided alert returns 409 to avoid silent
+    state mutations.
+    """
+    result = await db.execute(select(FraudAlert).where(FraudAlert.id == alert_id))
+    alert = result.scalar_one_or_none()
+    if alert is None:
+        raise FraudAlertNotFoundError(str(alert_id))
+
+    if alert.status != "pending":
+        raise FraudAlertAlreadyReviewedError(str(alert_id), alert.status)
+
+    now = datetime.now(timezone.utc)
+    alert.status = "approved" if request.action == "approve" else "confirmed_block"
+    alert.notes = request.notes
+    alert.reviewed_at = now
+    alert.reviewed_by = request.reviewed_by
+
+    # If approved, transition the payment back so the user can retry.
+    if request.action == "approve":
+        payment_result = await db.execute(select(Payment).where(Payment.id == alert.payment_id))
+        payment = payment_result.scalar_one_or_none()
+        if payment is not None and payment.status == "blocked_fraud_review":
+            payment.status = "processing"
+
+    await db.commit()
+    await db.refresh(alert)
+
+    return FraudAlertItem(
+        id=alert.id,
+        payment_id=alert.payment_id,
+        user_id=alert.user_id,
+        alert_type=alert.alert_type,
+        severity=alert.severity,
+        triggered_reason=alert.triggered_reason,
+        status=alert.status,
+        notes=alert.notes,
+        reviewed_by=alert.reviewed_by,
+        reviewed_at=alert.reviewed_at,
+        created_at=alert.created_at,
+    )
+
+
+async def get_fraud_alerts_summary(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> FraudAlertSummary:
+    """Aggregated counts: total, per status and per alert type."""
+    conditions: list = []
+    if date_from is not None:
+        conditions.append(FraudAlert.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(FraudAlert.created_at <= date_to)
+
+    # Status counts in a single GROUP BY
+    status_q = select(FraudAlert.status, func.count(FraudAlert.id).label("count"))
+    if conditions:
+        status_q = status_q.where(and_(*conditions))
+    status_q = status_q.group_by(FraudAlert.status)
+    status_rows = (await db.execute(status_q)).all()
+    by_status = {row.status: int(row.count) for row in status_rows}
+
+    # Per-type counts
+    type_q = select(FraudAlert.alert_type, func.count(FraudAlert.id).label("count"))
+    if conditions:
+        type_q = type_q.where(and_(*conditions))
+    type_q = type_q.group_by(FraudAlert.alert_type)
+    type_rows = (await db.execute(type_q)).all()
+    by_type = {row.alert_type: int(row.count) for row in type_rows}
+
+    total = sum(by_status.values())
+
+    return FraudAlertSummary(
+        total=total,
+        pending=by_status.get("pending", 0),
+        approved=by_status.get("approved", 0),
+        confirmed_block=by_status.get("confirmed_block", 0),
+        by_type=by_type,
     )
 
 

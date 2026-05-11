@@ -311,6 +311,62 @@ class RefundResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
 
+# ── Fraud alerts (HU4.7) ──
+
+
+class FraudAlertItem(BaseModel):
+    """Row in the admin fraud-alerts listing."""
+
+    id: uuid.UUID
+    payment_id: uuid.UUID = Field(..., alias="paymentId")
+    user_id: uuid.UUID = Field(..., alias="userId")
+    alert_type: str = Field(..., alias="alertType")
+    severity: str
+    triggered_reason: str = Field(..., alias="triggeredReason")
+    status: str
+    notes: str | None = None
+    reviewed_by: uuid.UUID | None = Field(None, alias="reviewedBy")
+    reviewed_at: datetime | None = Field(None, alias="reviewedAt")
+    created_at: datetime = Field(..., alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertListResponse(BaseModel):
+    items: list[FraudAlertItem]
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    total: int
+    total_pages: int = Field(..., alias="totalPages")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertReviewRequest(BaseModel):
+    """Body for POST /fraud-alerts/{id}/review."""
+
+    # 'approve' → unblock the payment (back to processing)
+    # 'confirm_block' → leave the payment blocked
+    action: Literal["approve", "confirm_block"]
+    notes: str | None = None
+    # Optional admin id; in production this would come from the JWT.
+    reviewed_by: uuid.UUID | None = Field(None, alias="reviewedBy")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertSummary(BaseModel):
+    """Aggregated metrics over the period for the admin dashboard."""
+
+    total: int
+    pending: int
+    approved: int
+    confirmed_block: int = Field(..., alias="confirmedBlock")
+    by_type: dict[str, int] = Field(..., alias="byType")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
 class PaymentAdminSummary(BaseModel):
     """Aggregated payment metrics for the admin dashboard cards.
 
