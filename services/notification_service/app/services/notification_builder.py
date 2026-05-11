@@ -85,3 +85,52 @@ def build_cancellation_refund_notification(booking_data: Dict[str, Any]) -> Dict
         ),
         "type": "booking_cancelled_no_refund",
     }
+
+
+# ── Fraud alerts (HU4.7) ──
+
+
+_FRAUD_TYPE_LABELS: Dict[str, str] = {
+    "duplicate": "Transaccion duplicada",
+    "velocity": "Velocidad sospechosa",
+    "threed_secure_failed": "Fallos consecutivos de 3D Secure",
+}
+
+
+def build_fraud_alert_email(alert_data: Dict[str, Any]) -> Dict[str, str]:
+    """Build a minimal HTML email for a fraud_detected event (HU4.7 CA5).
+
+    Targets the system admin (no per-user routing here): subject + HTML body
+    summarising what the rules engine flagged so the admin can decide via
+    the /fraud-alerts/{id}/review endpoint.
+    """
+    alert_type = alert_data.get("alert_type", "unknown")
+    label = _FRAUD_TYPE_LABELS.get(alert_type, alert_type)
+    amount = alert_data.get("amount", 0)
+    currency = alert_data.get("currency", "COP")
+    payment_id = alert_data.get("payment_id", "")
+    user_id = alert_data.get("user_id", "")
+    alert_id = alert_data.get("alert_id", "")
+    triggered = alert_data.get("triggered_reason", "")
+    severity = alert_data.get("severity", "high")
+
+    subject = f"[TravelHub] Alerta de fraude: {label}"
+    html = f"""<!doctype html>
+<html><body style="font-family:Arial,sans-serif;color:#222;">
+  <h2 style="color:#b00020;margin:0 0 8px 0;">Alerta de fraude detectada</h2>
+  <p><strong>Tipo:</strong> {label} ({alert_type})</p>
+  <p><strong>Severidad:</strong> {severity}</p>
+  <p><strong>Motivo:</strong> {triggered}</p>
+  <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+  <p><strong>Pago bloqueado:</strong> {payment_id}</p>
+  <p><strong>Viajero:</strong> {user_id}</p>
+  <p><strong>Monto:</strong> {currency} {amount}</p>
+  <p><strong>Alert ID:</strong> {alert_id}</p>
+  <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+  <p style="font-size:13px;color:#555;">
+    Reviewa esta alerta con
+    <code>POST /api/v1/payments/fraud-alerts/{alert_id}/review</code>.
+  </p>
+</body></html>
+"""
+    return {"subject": subject, "html": html, "type": "email_fraud_alert"}
