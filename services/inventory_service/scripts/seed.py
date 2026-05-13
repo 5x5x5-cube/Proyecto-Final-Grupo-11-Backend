@@ -175,6 +175,92 @@ HOTELS = [
 
 AVAILABILITY_DAYS = 60
 
+REVIEWS = {
+    uuid.UUID("a1000000-0000-0000-0000-000000000001"): [
+        {
+            "name": "María García",
+            "initial": "M",
+            "date": "Marzo 2026",
+            "stars": 5,
+            "text": "Hotel espectacular, la vista al mar es increíble. El servicio fue impecable y la habitación muy cómoda. Definitivamente volvería.",
+        },
+        {
+            "name": "Carlos Mendoza",
+            "initial": "C",
+            "date": "Febrero 2026",
+            "stars": 4,
+            "text": "Muy buena ubicación en Cartagena, cerca de la ciudad amurallada. La piscina es hermosa. Solo el desayuno podría mejorar.",
+        },
+        {
+            "name": "Ana Rodríguez",
+            "initial": "A",
+            "date": "Enero 2026",
+            "stars": 5,
+            "text": "La suite presidencial es un sueño. El jacuzzi privado y la terraza con vista al Caribe hacen que valga cada peso.",
+        },
+        {
+            "name": "David López",
+            "initial": "D",
+            "date": "Diciembre 2025",
+            "stars": 4,
+            "text": "Excelente hotel para vacaciones en familia. Las habitaciones son amplias y el personal muy amable.",
+        },
+    ],
+    uuid.UUID("a1000000-0000-0000-0000-000000000002"): [
+        {
+            "name": "Laura Martínez",
+            "initial": "L",
+            "date": "Marzo 2026",
+            "stars": 4,
+            "text": "Perfecto para viajes de negocios. El escritorio en la habitación y el WiFi rápido son un plus. Buena ubicación en el centro financiero.",
+        },
+        {
+            "name": "Roberto Sánchez",
+            "initial": "R",
+            "date": "Febrero 2026",
+            "stars": 3,
+            "text": "Hotel correcto para el precio. La habitación estándar es un poco pequeña pero limpia. El restaurante del hotel es bueno.",
+        },
+        {
+            "name": "Patricia Torres",
+            "initial": "P",
+            "date": "Enero 2026",
+            "stars": 5,
+            "text": "La habitación Deluxe con vista a las montañas es preciosa. El servicio de transporte al aeropuerto fue muy conveniente.",
+        },
+    ],
+    uuid.UUID("a1000000-0000-0000-0000-000000000003"): [
+        {
+            "name": "Fernando Ruiz",
+            "initial": "F",
+            "date": "Marzo 2026",
+            "stars": 5,
+            "text": "El eco-resort es un paraíso. Despertar rodeado de naturaleza y escuchar los pájaros no tiene precio. La villa con piscina privada es increíble.",
+        },
+        {
+            "name": "Camila Herrera",
+            "initial": "C",
+            "date": "Febrero 2026",
+            "stars": 5,
+            "text": "Una experiencia única en Medellín. Las cabañas son acogedoras y el jardín es hermoso. Perfecto para desconectarse.",
+        },
+        {
+            "name": "Andrés Vargas",
+            "initial": "A",
+            "date": "Enero 2026",
+            "stars": 4,
+            "text": "Muy buen concepto eco-friendly. La comida orgánica del restaurante es deliciosa. Solo faltaría mejor señal de celular.",
+        },
+        {
+            "name": "Valentina Díaz",
+            "initial": "V",
+            "date": "Diciembre 2025",
+            "stars": 5,
+            "text": "Las vistas panorámicas desde la villa son espectaculares. El mejor hotel en el que me he hospedado en Colombia.",
+        },
+    ],
+}
+
 
 async def seed(db_url: str | None = None) -> None:
     url = db_url or settings.database_url
@@ -183,6 +269,19 @@ async def seed(db_url: str | None = None) -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Always seed reviews to Redis (idempotent — overwrites existing keys)
+    try:
+        import json
+
+        import redis as redis_lib
+
+        r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+        for hotel_id, hotel_reviews in REVIEWS.items():
+            r.set(f"reviews:{hotel_id}", json.dumps(hotel_reviews))
+        print(f"Reviews seeded into Redis: {len(REVIEWS)} hotels")
+    except Exception as e:
+        print(f"WARNING: Could not seed reviews to Redis: {e}")
 
     try:
         async with session_factory() as db:

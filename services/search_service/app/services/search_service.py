@@ -194,6 +194,18 @@ class SearchService:
             rooms.append(room)
         return rooms
 
+    def get_hotel_reviews(self, hotel_id: str) -> List[Dict[str, Any]]:
+        """Retorna las reseñas de un hotel desde Redis."""
+        import json as json_module
+
+        raw = self.client.get(f"reviews:{hotel_id}")
+        if raw is None:
+            return []
+        try:
+            return json_module.loads(raw)
+        except (ValueError, TypeError):
+            return []
+
     def get_hotel_rooms(
         self, hotel_id: str, check_in: Optional[date] = None
     ) -> List[Dict[str, Any]]:

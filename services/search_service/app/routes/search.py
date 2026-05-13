@@ -91,6 +91,16 @@ async def get_hotel_detail(hotel_id: str):
     return hotel
 
 
+@router.get("/hotels/{hotel_id}/reviews")
+async def get_hotel_reviews(hotel_id: str):
+    """
+    Retorna las reseñas de un hotel.
+    Las reseñas se almacenan en Redis como reviews:{hotel_id}.
+    """
+    reviews = search_service.get_hotel_reviews(hotel_id)
+    return reviews
+
+
 @router.get("/hotels/{hotel_id}/rooms")
 async def get_hotel_rooms(hotel_id: str, check_in: Optional[date] = Query(None)):
     """
