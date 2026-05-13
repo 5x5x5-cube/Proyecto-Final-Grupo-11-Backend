@@ -35,6 +35,8 @@ async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Dep
         country=hotel_data.country,
         address=hotel_data.address,
         rating=hotel_data.rating,
+        image_url=hotel_data.image_url,
+        images=hotel_data.images,
     )
 
     db.add(new_hotel)
@@ -49,6 +51,8 @@ async def register_hotel_webhook(hotel_data: HotelCreate, db: AsyncSession = Dep
         "country": new_hotel.country,
         "address": new_hotel.address,
         "rating": new_hotel.rating,
+        "image_url": new_hotel.image_url,
+        "images": new_hotel.images,
     }
 
     await sns_publisher.publish_hotel_created(hotel_dict)

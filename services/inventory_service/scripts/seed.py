@@ -47,6 +47,14 @@ HOTELS = [
         "country": "Colombia",
         "rating": 4.5,
         "admin_id": "hotel-admin-001",
+        "image_url": "https://picsum.photos/seed/caribe-plaza/800/500",
+        "images": [
+            "https://picsum.photos/seed/caribe-1/800/500",
+            "https://picsum.photos/seed/caribe-2/800/500",
+            "https://picsum.photos/seed/caribe-3/800/500",
+            "https://picsum.photos/seed/caribe-4/800/500",
+            "https://picsum.photos/seed/caribe-5/800/500",
+        ],
         "rooms": [
             {
                 "id": uuid.UUID("b1000000-0000-0000-0000-000000000001"),
@@ -57,6 +65,10 @@ HOTELS = [
                 "tax_rate": 0.19,
                 "description": "Comfortable room with city view",
                 "amenities": {"wifi": True, "ac": True, "tv": True},
+                "images": [
+                    "https://picsum.photos/seed/caribe-std-1/600/400",
+                    "https://picsum.photos/seed/caribe-std-2/600/400",
+                ],
                 "total_quantity": 5,
             },
             {
@@ -74,6 +86,10 @@ HOTELS = [
                     "minibar": True,
                     "balcony": True,
                 },
+                "images": [
+                    "https://picsum.photos/seed/caribe-dlx-1/600/400",
+                    "https://picsum.photos/seed/caribe-dlx-2/600/400",
+                ],
                 "total_quantity": 3,
             },
             {
@@ -92,6 +108,11 @@ HOTELS = [
                     "balcony": True,
                     "jacuzzi": True,
                 },
+                "images": [
+                    "https://picsum.photos/seed/caribe-suite-1/600/400",
+                    "https://picsum.photos/seed/caribe-suite-2/600/400",
+                    "https://picsum.photos/seed/caribe-suite-3/600/400",
+                ],
                 "total_quantity": 1,
             },
         ],
@@ -103,6 +124,13 @@ HOTELS = [
         "city": "Bogota",
         "country": "Colombia",
         "rating": 4.2,
+        "image_url": "https://picsum.photos/seed/bogota-grand/800/500",
+        "images": [
+            "https://picsum.photos/seed/bogota-1/800/500",
+            "https://picsum.photos/seed/bogota-2/800/500",
+            "https://picsum.photos/seed/bogota-3/800/500",
+            "https://picsum.photos/seed/bogota-4/800/500",
+        ],
         "rooms": [
             {
                 "id": uuid.UUID("b1000000-0000-0000-0000-000000000004"),
@@ -113,6 +141,10 @@ HOTELS = [
                 "tax_rate": 0.19,
                 "description": "Business-ready room with workspace",
                 "amenities": {"wifi": True, "ac": True, "tv": True, "desk": True},
+                "images": [
+                    "https://picsum.photos/seed/bogota-std-1/600/400",
+                    "https://picsum.photos/seed/bogota-std-2/600/400",
+                ],
                 "total_quantity": 8,
             },
             {
@@ -130,6 +162,10 @@ HOTELS = [
                     "minibar": True,
                     "desk": True,
                 },
+                "images": [
+                    "https://picsum.photos/seed/bogota-dlx-1/600/400",
+                    "https://picsum.photos/seed/bogota-dlx-2/600/400",
+                ],
                 "total_quantity": 4,
             },
         ],
@@ -141,6 +177,14 @@ HOTELS = [
         "city": "Medellin",
         "country": "Colombia",
         "rating": 4.7,
+        "image_url": "https://picsum.photos/seed/medellin-eco/800/500",
+        "images": [
+            "https://picsum.photos/seed/medellin-1/800/500",
+            "https://picsum.photos/seed/medellin-2/800/500",
+            "https://picsum.photos/seed/medellin-3/800/500",
+            "https://picsum.photos/seed/medellin-4/800/500",
+            "https://picsum.photos/seed/medellin-5/800/500",
+        ],
         "rooms": [
             {
                 "id": uuid.UUID("b1000000-0000-0000-0000-000000000006"),
@@ -151,6 +195,10 @@ HOTELS = [
                 "tax_rate": 0.19,
                 "description": "Cozy eco-cabin with garden view",
                 "amenities": {"wifi": True, "garden_view": True},
+                "images": [
+                    "https://picsum.photos/seed/medellin-cabin-1/600/400",
+                    "https://picsum.photos/seed/medellin-cabin-2/600/400",
+                ],
                 "total_quantity": 6,
             },
             {
@@ -167,6 +215,11 @@ HOTELS = [
                     "kitchen": True,
                     "garden_view": True,
                 },
+                "images": [
+                    "https://picsum.photos/seed/medellin-villa-1/600/400",
+                    "https://picsum.photos/seed/medellin-villa-2/600/400",
+                    "https://picsum.photos/seed/medellin-villa-3/600/400",
+                ],
                 "total_quantity": 2,
             },
         ],
@@ -270,18 +323,48 @@ async def seed(db_url: str | None = None) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Always seed reviews to Redis (idempotent — overwrites existing keys)
+    # Always seed reviews and sync images to Redis (idempotent)
     try:
         import json
 
         import redis as redis_lib
 
         r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+
+        # Reviews
         for hotel_id, hotel_reviews in REVIEWS.items():
             r.set(f"reviews:{hotel_id}", json.dumps(hotel_reviews))
         print(f"Reviews seeded into Redis: {len(REVIEWS)} hotels")
+
+        # Sync hotel images to Redis (patch existing JSON objects)
+        for hotel_data in HOTELS:
+            key = f"hotel:{hotel_data['id']}"
+            if r.exists(key):
+                try:
+                    r.json().set(key, "$.image_url", hotel_data.get("image_url"))
+                    r.json().set(key, "$.images", hotel_data.get("images", []))
+                except Exception:
+                    # Fallback: read, merge, write
+                    raw = r.get(key)
+                    if raw:
+                        obj = json.loads(raw)
+                        obj["image_url"] = hotel_data.get("image_url")
+                        obj["images"] = hotel_data.get("images", [])
+                        r.set(key, json.dumps(obj))
+            for room_data in hotel_data["rooms"]:
+                rkey = f"room:{room_data['id']}"
+                if r.exists(rkey):
+                    try:
+                        r.json().set(rkey, "$.images", room_data.get("images", []))
+                    except Exception:
+                        raw = r.get(rkey)
+                        if raw:
+                            obj = json.loads(raw)
+                            obj["images"] = room_data.get("images", [])
+                            r.set(rkey, json.dumps(obj))
+        print("Hotel/room images synced to Redis")
     except Exception as e:
-        print(f"WARNING: Could not seed reviews to Redis: {e}")
+        print(f"WARNING: Could not seed to Redis: {e}")
 
     try:
         async with session_factory() as db:
@@ -302,6 +385,8 @@ async def seed(db_url: str | None = None) -> None:
                     city=hotel_data["city"],
                     country=hotel_data["country"],
                     rating=hotel_data["rating"],
+                    image_url=hotel_data.get("image_url"),
+                    images=hotel_data.get("images"),
                     admin_id=hotel_data.get("admin_id"),
                 )
                 db.add(hotel)
@@ -314,6 +399,8 @@ async def seed(db_url: str | None = None) -> None:
                     "city": hotel.city,
                     "country": hotel.country,
                     "rating": hotel.rating,
+                    "image_url": hotel.image_url,
+                    "images": hotel.images,
                 }
                 if sqs_ready:
                     await sns_publisher.publish_hotel_created(hotel_dict)
@@ -329,6 +416,7 @@ async def seed(db_url: str | None = None) -> None:
                         tax_rate=room_data["tax_rate"],
                         description=room_data["description"],
                         amenities=room_data["amenities"],
+                        images=room_data.get("images"),
                         total_quantity=room_data["total_quantity"],
                     )
                     db.add(room)
@@ -344,6 +432,7 @@ async def seed(db_url: str | None = None) -> None:
                         "tax_rate": float(room.tax_rate),
                         "total_quantity": room.total_quantity,
                         "amenities": room.amenities,
+                        "images": room.images,
                     }
                     if sqs_ready:
                         await sns_publisher.publish_room_created(room_dict)

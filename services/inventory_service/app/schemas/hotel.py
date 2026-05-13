@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -11,6 +11,8 @@ class HotelBase(BaseModel):
     country: str = Field(..., min_length=1, max_length=100)
     address: Optional[str] = None
     rating: Optional[float] = Field(None, ge=0, le=5)
+    image_url: Optional[str] = None
+    images: Optional[List[str]] = None
     admin_id: Optional[str] = None
 
 
