@@ -17,7 +17,9 @@ router = APIRouter(prefix="/discounts", tags=["inventory"])
 async def _republish_tariff(tariff: Tariff, db: AsyncSession, is_update: bool = True) -> None:
     """Recalculate effective price and republish tariff event to SNS."""
     today = date.today()
-    print(f"[republish] tariff={tariff.id} rate_type={tariff.rate_type} base={tariff.price_per_night}")
+    print(
+        f"[republish] tariff={tariff.id} rate_type={tariff.rate_type} base={tariff.price_per_night}"
+    )
     result = await db.execute(
         select(Discount).where(
             Discount.tariff_id == tariff.id,
