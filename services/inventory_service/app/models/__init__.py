@@ -20,6 +20,8 @@ class Hotel(Base):
     country: Mapped[str | None] = mapped_column(String(100))
     address: Mapped[str | None] = mapped_column(String(255))
     rating: Mapped[float | None] = mapped_column(DECIMAL(2, 1))
+    image_url: Mapped[str | None] = mapped_column(Text)
+    images: Mapped[list | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(20), default="active")
     admin_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -43,6 +45,7 @@ class Room(Base):
     tax_rate: Mapped[float] = mapped_column(DECIMAL(5, 4), default=0.19)
     description: Mapped[str | None] = mapped_column(Text)
     amenities: Mapped[dict | None] = mapped_column(JSONB)
+    images: Mapped[list | None] = mapped_column(JSONB)
     total_quantity: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
