@@ -240,7 +240,7 @@ async def _block_payment_for_fraud(
                 "triggered_reason": alert.triggered_reason,
             }
         )
-    except Exception:  # noqa: BLE001 — fire-and-forget; do not roll back the block
+    except Exception:  # noqa: BLE001 — fire-and-forget; do not roll back the block  # nosec B110
         pass
 
     return _build_payment_response(

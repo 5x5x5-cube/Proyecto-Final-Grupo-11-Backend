@@ -21,6 +21,7 @@ class RoomResponse(BaseModel):
     tax_rate: float
     description: str | None = None
     amenities: dict | None = None
+    images: list | None = None
     total_quantity: int
     created_at: datetime
 
@@ -104,6 +105,7 @@ class TariffResponse(BaseModel):
     room_id: uuid.UUID
     room_name: str
     room_location: str
+    room_image: str | None = None
     rate_type: str
     price_per_night: float
     start_date: date | None = None

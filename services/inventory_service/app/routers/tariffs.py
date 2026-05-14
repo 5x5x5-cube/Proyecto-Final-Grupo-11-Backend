@@ -45,6 +45,7 @@ def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffRe
         room_id=tariff.room_id,
         room_name=room.room_type,
         room_location=hotel.city or hotel.address or "",
+        room_image=room.images[0] if room.images else None,
         rate_type=tariff.rate_type,
         price_per_night=float(tariff.price_per_night),
         start_date=tariff.start_date,

@@ -220,6 +220,7 @@ services:
       - "8009:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/travelhub
+      - REDIS_URL=redis://redis:6379/2
       - CART_SERVICE_URL=http://cart-service:8000
       - BOOKING_SERVICE_URL=http://booking-service:8000
       - SNS_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:command-update
@@ -229,6 +230,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=test
     depends_on:
       - postgres
+      - redis
       - cart-service
       - localstack
     networks:
