@@ -8,6 +8,15 @@ from app.services.redis_indexer import indexer
 
 settings = get_settings()
 
+# Curated city photos from Unsplash (specific photo IDs for each destination)
+CITY_IMAGES: Dict[str, str] = {
+    "Bogota": "https://images.unsplash.com/photo-1536086845634-381e57f13e9c?w=800&q=80",
+    "Bogotá": "https://images.unsplash.com/photo-1536086845634-381e57f13e9c?w=800&q=80",
+    "Medellin": "https://images.unsplash.com/photo-1599413987323-b2b8ee09f8ed?w=800&q=80",
+    "Medellín": "https://images.unsplash.com/photo-1599413987323-b2b8ee09f8ed?w=800&q=80",
+    "Cartagena": "https://images.unsplash.com/photo-1583531352515-8884af319dc1?w=800&q=80",
+}
+
 
 def _get_applicable_price(tariffs: list, check_in: date) -> float | None:
     is_weekend = check_in.weekday() >= 4
@@ -255,7 +264,11 @@ class SearchService:
                 pais = hotel_data.get("country", "").strip()
                 if ciudad and ciudad not in ciudades_vistas:
                     ciudades_vistas.add(ciudad)
-                    destinos.append({"city": ciudad, "country": pais})
+                    dest: Dict[str, str] = {"city": ciudad, "country": pais}
+                    image = CITY_IMAGES.get(ciudad)
+                    if image:
+                        dest["image_url"] = image
+                    destinos.append(dest)
 
             destinos.sort(key=lambda d: d["city"])
             return destinos
