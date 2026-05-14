@@ -63,6 +63,11 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: aws-endpoint-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: redis-url
         livenessProbe:
           httpGet:
             path: /health
