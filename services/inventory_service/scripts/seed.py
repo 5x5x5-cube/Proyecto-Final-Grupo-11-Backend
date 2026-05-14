@@ -177,13 +177,13 @@ HOTELS = [
         "city": "Medellin",
         "country": "Colombia",
         "rating": 4.7,
-        "image_url": "https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=800&h=500&fit=crop",
+        "image_url": "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&h=500&fit=crop",
         "images": [
-            "https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?w=800&h=500&fit=crop",
-            "https://images.unsplash.com/photo-1510798831971-661eb04b3739?w=800&h=500&fit=crop",
-            "https://images.unsplash.com/photo-1470770841497-7b3200f18753?w=800&h=500&fit=crop",
-            "https://images.unsplash.com/photo-1540541338287-41700207dee6?w=800&h=500&fit=crop",
-            "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&h=500&fit=crop",
+            "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&h=500&fit=crop",
+            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=500&fit=crop",
+            "https://images.unsplash.com/photo-1559599238-308793637427?w=800&h=500&fit=crop",
+            "https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=800&h=500&fit=crop",
+            "https://images.unsplash.com/photo-1505765050516-f72dcac9c60e?w=800&h=500&fit=crop",
         ],
         "rooms": [
             {
@@ -196,8 +196,8 @@ HOTELS = [
                 "description": "Cozy eco-cabin with garden view",
                 "amenities": {"wifi": True, "garden_view": True},
                 "images": [
-                    "https://images.unsplash.com/photo-1587061949409-02df41d5e562?w=600&h=400&fit=crop",
-                    "https://images.unsplash.com/photo-1618245318763-a15156d6b23c?w=600&h=400&fit=crop",
+                    "https://images.unsplash.com/photo-1595521624992-48a59aef95e3?w=600&h=400&fit=crop",
+                    "https://images.unsplash.com/photo-1604709177225-055f99402ea3?w=600&h=400&fit=crop",
                 ],
                 "total_quantity": 6,
             },
@@ -216,9 +216,9 @@ HOTELS = [
                     "garden_view": True,
                 },
                 "images": [
-                    "https://images.unsplash.com/photo-1602002418082-a4443e081dd1?w=600&h=400&fit=crop",
-                    "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&h=400&fit=crop",
-                    "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=400&fit=crop",
+                    "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&h=400&fit=crop",
+                    "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=600&h=400&fit=crop",
+                    "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=600&h=400&fit=crop",
                 ],
                 "total_quantity": 2,
             },
