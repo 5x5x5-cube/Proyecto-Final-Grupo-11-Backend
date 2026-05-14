@@ -13,6 +13,25 @@ from app.models import Availability, Base, Hotel, Room, Tariff
 from app.services.sns_publisher import sns_publisher
 
 
+def wait_for_redis(retries: int = 10, delay: int = 2) -> bool:
+    """Wait until Redis is reachable."""
+    import time
+
+    import redis as redis_lib
+
+    for attempt in range(retries):
+        try:
+            r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+            r.ping()
+            print("Redis ready.")
+            return True
+        except Exception:
+            print(f"Redis not ready, retrying in {delay}s... ({attempt + 1}/{retries})")
+            time.sleep(delay)
+    print("Redis not available after retries, skipping Redis seed.")
+    return False
+
+
 async def wait_for_sns(retries: int = 10, delay: int = 3) -> bool:
     """Wait until the SNS topic is available."""
     import boto3
@@ -324,47 +343,47 @@ async def seed(db_url: str | None = None) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
     # Always seed reviews and sync images to Redis (idempotent)
-    try:
-        import json
+    if wait_for_redis():
+        try:
+            import json
 
-        import redis as redis_lib
+            import redis as redis_lib
 
-        r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+            r = redis_lib.from_url(settings.redis_url, decode_responses=True)
 
-        # Reviews
-        for hotel_id, hotel_reviews in REVIEWS.items():
-            r.set(f"reviews:{hotel_id}", json.dumps(hotel_reviews))
-        print(f"Reviews seeded into Redis: {len(REVIEWS)} hotels")
+            # Reviews
+            for hotel_id, hotel_reviews in REVIEWS.items():
+                r.set(f"reviews:{hotel_id}", json.dumps(hotel_reviews))
+            print(f"Reviews seeded into Redis: {len(REVIEWS)} hotels")
 
-        # Sync hotel images to Redis (patch existing JSON objects)
-        for hotel_data in HOTELS:
-            key = f"hotel:{hotel_data['id']}"
-            if r.exists(key):
-                try:
-                    r.json().set(key, "$.image_url", hotel_data.get("image_url"))
-                    r.json().set(key, "$.images", hotel_data.get("images", []))
-                except Exception:
-                    # Fallback: read, merge, write
-                    raw = r.get(key)
-                    if raw:
-                        obj = json.loads(raw)
-                        obj["image_url"] = hotel_data.get("image_url")
-                        obj["images"] = hotel_data.get("images", [])
-                        r.set(key, json.dumps(obj))
-            for room_data in hotel_data["rooms"]:
-                rkey = f"room:{room_data['id']}"
-                if r.exists(rkey):
+            # Sync hotel images to Redis (patch existing JSON objects)
+            for hotel_data in HOTELS:
+                key = f"hotel:{hotel_data['id']}"
+                if r.exists(key):
                     try:
-                        r.json().set(rkey, "$.images", room_data.get("images", []))
+                        r.json().set(key, "$.image_url", hotel_data.get("image_url"))
+                        r.json().set(key, "$.images", hotel_data.get("images", []))
                     except Exception:
-                        raw = r.get(rkey)
+                        raw = r.get(key)
                         if raw:
                             obj = json.loads(raw)
-                            obj["images"] = room_data.get("images", [])
-                            r.set(rkey, json.dumps(obj))
-        print("Hotel/room images synced to Redis")
-    except Exception as e:
-        print(f"WARNING: Could not seed to Redis: {e}")
+                            obj["image_url"] = hotel_data.get("image_url")
+                            obj["images"] = hotel_data.get("images", [])
+                            r.set(key, json.dumps(obj))
+                for room_data in hotel_data["rooms"]:
+                    rkey = f"room:{room_data['id']}"
+                    if r.exists(rkey):
+                        try:
+                            r.json().set(rkey, "$.images", room_data.get("images", []))
+                        except Exception:
+                            raw = r.get(rkey)
+                            if raw:
+                                obj = json.loads(raw)
+                                obj["images"] = room_data.get("images", [])
+                                r.set(rkey, json.dumps(obj))
+            print("Hotel/room images synced to Redis")
+        except Exception as e:
+            print(f"WARNING: Could not seed to Redis: {e}")
 
     try:
         async with session_factory() as db:
