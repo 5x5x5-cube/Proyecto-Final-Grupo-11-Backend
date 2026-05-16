@@ -130,7 +130,7 @@ class RevenueService:
                 b.guest_name,
                 b.check_in,
                 b.check_out,
-                EXTRACT(DAY FROM (b.check_out - b.check_in)) as nights,
+                (b.check_out - b.check_in) as nights,
                 b.total_price as amount,
                 b.currency,
                 b.status,
