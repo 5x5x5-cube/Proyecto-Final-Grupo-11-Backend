@@ -18,8 +18,10 @@ spec:
       containers:
       - name: booking-worker
         image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
-        command: ["python", "workers/sqs_worker.py"]
+        command: ["python", "-u", "workers/sqs_worker.py"]
         env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
