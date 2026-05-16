@@ -61,7 +61,7 @@ variable "node_max_size" {
 variable "ecr_repositories" {
   description = "List of ECR repositories to create"
   type        = list(string)
-  default     = [
+  default = [
     "auth-service",
     "booking-service",
     "search-service",
