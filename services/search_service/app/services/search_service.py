@@ -10,10 +10,10 @@ settings = get_settings()
 
 # Curated city photos from Unsplash (specific photo IDs for each destination)
 CITY_IMAGES: Dict[str, str] = {
-    "Bogota": "https://images.unsplash.com/photo-1536086845634-381e57f13e9c?w=800&q=80",
-    "Bogotá": "https://images.unsplash.com/photo-1536086845634-381e57f13e9c?w=800&q=80",
-    "Medellin": "https://images.unsplash.com/photo-1599413987323-b2b8ee09f8ed?w=800&q=80",
-    "Medellín": "https://images.unsplash.com/photo-1599413987323-b2b8ee09f8ed?w=800&q=80",
+    "Bogota": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+    "Bogotá": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+    "Medellin": "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&q=80",
+    "Medellín": "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&q=80",
     "Cartagena": "https://images.unsplash.com/photo-1583531352515-8884af319dc1?w=800&q=80",
 }
 
