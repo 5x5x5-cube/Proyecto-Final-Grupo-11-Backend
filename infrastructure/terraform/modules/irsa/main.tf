@@ -122,6 +122,11 @@ resource "aws_iam_role_policy_attachment" "booking_payment_sqs" {
   policy_arn = var.payment_booking_sqs_access_policy_arn
 }
 
+resource "aws_iam_role_policy_attachment" "booking_sns" {
+  role       = aws_iam_role.booking_service.name
+  policy_arn = var.sns_publish_policy_arn
+}
+
 resource "aws_iam_role_policy_attachment" "inventory_sns" {
   role       = aws_iam_role.inventory_service.name
   policy_arn = var.sns_publish_policy_arn
