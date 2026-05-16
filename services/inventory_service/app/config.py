@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_endpoint_url: str = "http://localhost:4566"
     sns_topic_arn: str = "arn:aws:sns:us-east-1:000000000000:command-update"
+    # SQS queue subscribed to the SNS topic — receives booking.cancelled events
+    sqs_queue_url: str = "http://localhost:4566/000000000000/inventory-events-queue"
+    sqs_poll_interval: int = 20
+    sqs_max_messages: int = 10
+    sqs_visibility_timeout: int = 300
     aws_access_key_id: str = "test"
     aws_secret_access_key: str = "test"
 

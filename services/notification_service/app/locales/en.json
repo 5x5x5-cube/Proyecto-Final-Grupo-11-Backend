@@ -1,0 +1,21 @@
+{
+  "payment_confirmed": "Payment confirmed",
+  "booking_registered": "Your booking has been successfully registered.",
+  "booking_code_label": "Booking code",
+  "booking_details": "Booking details",
+  "hotel": "Hotel",
+  "room": "Room",
+  "check_in": "Check-in",
+  "check_out": "Check-out",
+  "guests": "Guests",
+  "payment_summary": "Payment summary",
+  "subtotal": "Subtotal",
+  "taxes": "Taxes",
+  "service_fee": "Service fee",
+  "total_paid": "Total paid",
+  "payment_method": "Payment method",
+  "transaction_id": "Transaction ID",
+  "contact_text": "If you have any questions, contact us at",
+  "rights_reserved": "All rights reserved.",
+  "subject": "Booking confirmation %{code} - TravelHub"
+}

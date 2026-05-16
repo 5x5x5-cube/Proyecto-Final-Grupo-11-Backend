@@ -130,6 +130,7 @@ class InitiatePaymentRequest(BaseModel):
     token: str
     cart_id: uuid.UUID = Field(..., alias="cartId")
     method: str = "credit_card"
+    currency: str = "COP"
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -182,6 +183,7 @@ class BookingData(BaseModel):
     tax_amount: str = Field(..., alias="taxAmount")
     service_fee: str = Field("0", alias="serviceFee")
     total_price: str = Field(..., alias="totalPrice")
+    locale: str | None = Field(None)
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
@@ -242,5 +244,147 @@ class PaymentResponse(BaseModel):
     message: str | None = None
     created_at: datetime = Field(..., alias="createdAt")
     processed_at: datetime | None = Field(None, alias="processedAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Admin: payment listing ──
+
+
+class PaymentAdminListItem(BaseModel):
+    """Compact payment representation for the admin transactions table.
+
+    The frontend renders one row per item; cross-service enrichment (e.g.
+    looking up the user's name from auth_service) happens client-side.
+    """
+
+    id: uuid.UUID
+    user_id: uuid.UUID = Field(..., alias="userId")
+    amount: float
+    currency: str
+    method: str  # method_type from UserPaymentMethod
+    method_label: str = Field(..., alias="methodLabel")  # display_label, e.g. "Visa •••• 4242"
+    status: str
+    transaction_id: str | None = Field(None, alias="transactionId")
+    error_code: str | None = Field(None, alias="errorCode")
+    created_at: datetime = Field(..., alias="createdAt")
+    processed_at: datetime | None = Field(None, alias="processedAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminListResponse(BaseModel):
+    items: list[PaymentAdminListItem]
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    total: int
+    total_pages: int = Field(..., alias="totalPages")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Refund (HU4.3) ──
+
+
+class RefundRequest(BaseModel):
+    """Request body for POST /payments/{id}/refund.
+
+    `amount` is required so the caller (booking_service) can apply the
+    cancellation policy (100% / 50% / 0%) and pass the resulting figure.
+    """
+
+    amount: float
+    reason: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class RefundResponse(BaseModel):
+    payment_id: uuid.UUID = Field(..., alias="paymentId")
+    status: str  # always "refunded" on success
+    amount: float  # the original payment amount, untouched
+    currency: str
+    refund_amount: float = Field(..., alias="refundAmount")
+    refunded_at: datetime = Field(..., alias="refundedAt")
+    reason: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+# ── Fraud alerts (HU4.7) ──
+
+
+class FraudAlertItem(BaseModel):
+    """Row in the admin fraud-alerts listing."""
+
+    id: uuid.UUID
+    payment_id: uuid.UUID = Field(..., alias="paymentId")
+    user_id: uuid.UUID = Field(..., alias="userId")
+    alert_type: str = Field(..., alias="alertType")
+    severity: str
+    triggered_reason: str = Field(..., alias="triggeredReason")
+    status: str
+    notes: str | None = None
+    reviewed_by: uuid.UUID | None = Field(None, alias="reviewedBy")
+    reviewed_at: datetime | None = Field(None, alias="reviewedAt")
+    created_at: datetime = Field(..., alias="createdAt")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertListResponse(BaseModel):
+    items: list[FraudAlertItem]
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    total: int
+    total_pages: int = Field(..., alias="totalPages")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertReviewRequest(BaseModel):
+    """Body for POST /fraud-alerts/{id}/review."""
+
+    # 'approve' → unblock the payment (back to processing)
+    # 'confirm_block' → leave the payment blocked
+    action: Literal["approve", "confirm_block"]
+    notes: str | None = None
+    # Optional admin id; in production this would come from the JWT.
+    reviewed_by: uuid.UUID | None = Field(None, alias="reviewedBy")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class FraudAlertSummary(BaseModel):
+    """Aggregated metrics over the period for the admin dashboard."""
+
+    total: int
+    pending: int
+    approved: int
+    confirmed_block: int = Field(..., alias="confirmedBlock")
+    by_type: dict[str, int] = Field(..., alias="byType")
+
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class PaymentAdminSummary(BaseModel):
+    """Aggregated payment metrics for the admin dashboard cards.
+
+    Amounts are summed without currency conversion — single-currency hotels
+    will be accurate; multi-currency aggregations would need a base-currency
+    conversion step (out of scope for HU4.4).
+    """
+
+    total_processed: float = Field(..., alias="totalProcessed")  # sum of approved
+    total_declined: float = Field(..., alias="totalDeclined")
+    total_refunded: float = Field(..., alias="totalRefunded")
+    # approved / (approved + declined) — float 0..1, 0.0 when there are no decided payments
+    approval_rate: float = Field(..., alias="approvalRate")
+    transaction_count: int = Field(..., alias="transactionCount")
+    approved_count: int = Field(..., alias="approvedCount")
+    declined_count: int = Field(..., alias="declinedCount")
+    refunded_count: int = Field(..., alias="refundedCount")
+    processing_count: int = Field(..., alias="processingCount")
+    currency: str  # dominant currency of the aggregated rows; "COP" by default
 
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

@@ -8,6 +8,15 @@ from app.services.redis_indexer import indexer
 
 settings = get_settings()
 
+# Curated city photos from Unsplash (specific photo IDs for each destination)
+CITY_IMAGES: Dict[str, str] = {
+    "Bogota": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+    "Bogotá": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+    "Medellin": "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&q=80",
+    "Medellín": "https://images.unsplash.com/photo-1610641818989-c2051b5e2cfd?w=800&q=80",
+    "Cartagena": "https://images.unsplash.com/photo-1583531352515-8884af319dc1?w=800&q=80",
+}
+
 
 def _get_applicable_price(tariffs: list, check_in: date) -> float | None:
     is_weekend = check_in.weekday() >= 4
@@ -194,6 +203,18 @@ class SearchService:
             rooms.append(room)
         return rooms
 
+    def get_hotel_reviews(self, hotel_id: str) -> List[Dict[str, Any]]:
+        """Retorna las reseñas de un hotel desde Redis."""
+        import json as json_module
+
+        raw = self.client.get(f"reviews:{hotel_id}")
+        if raw is None:
+            return []
+        try:
+            return json_module.loads(raw)
+        except (ValueError, TypeError):
+            return []
+
     def get_hotel_rooms(
         self, hotel_id: str, check_in: Optional[date] = None
     ) -> List[Dict[str, Any]]:
@@ -243,7 +264,11 @@ class SearchService:
                 pais = hotel_data.get("country", "").strip()
                 if ciudad and ciudad not in ciudades_vistas:
                     ciudades_vistas.add(ciudad)
-                    destinos.append({"city": ciudad, "country": pais})
+                    dest: Dict[str, str] = {"city": ciudad, "country": pais}
+                    image = CITY_IMAGES.get(ciudad)
+                    if image:
+                        dest["image_url"] = image
+                    destinos.append(dest)
 
             destinos.sort(key=lambda d: d["city"])
             return destinos

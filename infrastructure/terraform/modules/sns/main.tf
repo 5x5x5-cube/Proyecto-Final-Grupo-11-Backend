@@ -237,3 +237,33 @@ resource "aws_iam_policy" "payment_booking_sqs_access" {
     Environment = var.environment
   }
 }
+
+resource "aws_iam_policy" "notification_sqs_access" {
+  name        = "${var.project_name}-${var.environment}-notification-sqs-access"
+  description = "Policy for SQS access to notification queue from EKS pods"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ChangeMessageVisibility"
+        ]
+        Resource = [
+          aws_sqs_queue.notification.arn,
+          aws_sqs_queue.notification_dlq.arn
+        ]
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+  }
+}

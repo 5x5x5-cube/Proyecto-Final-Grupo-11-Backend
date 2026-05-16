@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Variables
 CLUSTER_NAME="proyecto-final-dev"
 REGION="us-east-1"
-AWS_ACCOUNT_ID="618246140762"
+AWS_ACCOUNT_ID="735566955557"
 ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 ECR_PREFIX="proyecto-final-dev"
 
@@ -167,7 +167,7 @@ echo ""
 echo -e "${YELLOW}Paso 7: Construir y subir imágenes Docker${NC}"
 echo "Esto tomará varios minutos..."
 
-SERVICES=("auth-service" "inventory-service" "search-service" "cart-service" "notification-service" "health-copilot" "payment-service" "booking-service")
+SERVICES=("gateway-service" "auth-service" "inventory-service" "search-service" "cart-service" "notification-service" "health-copilot" "payment-service" "booking-service")
 
 for SERVICE in "${SERVICES[@]}"; do
     echo ""
@@ -179,7 +179,7 @@ for SERVICE in "${SERVICES[@]}"; do
         SERVICE_DIR="services/${SERVICE//-/_}"
     fi
     
-    docker build -t $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest $SERVICE_DIR
+    docker build --platform linux/amd64 -t $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest $SERVICE_DIR
     docker push $ECR_REGISTRY/${ECR_PREFIX}-${SERVICE}:latest
     
     echo -e "${GREEN}$SERVICE subido a ECR${NC}"
@@ -203,6 +203,7 @@ echo -e "${YELLOW}Paso 9: Desplegar servicios en Kubernetes${NC}"
 
 # Solo desplegar los servicios que tienen imagen construida
 DEPLOY_YAMLS=(
+    "kubernetes/deployments/gateway-service.yaml"
     "kubernetes/deployments/auth-service.yaml"
     "kubernetes/deployments/inventory-service.yaml"
     "kubernetes/deployments/search-service.yaml"
@@ -212,6 +213,7 @@ DEPLOY_YAMLS=(
     "kubernetes/deployments/health-copilot.yaml"
     "kubernetes/deployments/payment-service.yaml"
     "kubernetes/deployments/booking-service.yaml"
+    "kubernetes/deployments/booking-worker.yaml"
 )
 
 for YAML in "${DEPLOY_YAMLS[@]}"; do

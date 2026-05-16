@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import select
@@ -6,11 +7,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from ..database import get_db
-from ..models import Hotel, Room, Tariff
+from ..models import Discount, Hotel, Room, Tariff
 from ..schemas import AdminRoomResponse, TariffCreate, TariffResponse, TariffUpdate
 from ..services.sns_publisher import sns_publisher
 
 router = APIRouter(prefix="/tariffs", tags=["inventory"])
+
+
+async def _effective_price(tariff: Tariff, db: AsyncSession) -> float:
+    """Return tariff price after applying the best active discount, if any."""
+    today = date.today()
+    result = await db.execute(
+        select(Discount).where(
+            Discount.tariff_id == tariff.id,
+            Discount.start_date <= today,
+            Discount.end_date >= today,
+        )
+    )
+    discounts = result.scalars().all()
+    if not discounts:
+        return float(tariff.price_per_night)
+
+    base = float(tariff.price_per_night)
+    best = base
+    for d in discounts:
+        if d.discount_type == "percentage":
+            candidate = base * (1 - float(d.value) / 100)
+        else:
+            candidate = base - float(d.value)
+        best = min(best, candidate)
+    return max(0.0, best)
 
 
 def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffResponse:
@@ -19,6 +45,7 @@ def _build_tariff_response(tariff: Tariff, room: Room, hotel: Hotel) -> TariffRe
         room_id=tariff.room_id,
         room_name=room.room_type,
         room_location=hotel.city or hotel.address or "",
+        room_image=room.images[0] if room.images else None,
         rate_type=tariff.rate_type,
         price_per_night=float(tariff.price_per_night),
         start_date=tariff.start_date,
@@ -101,7 +128,7 @@ async def create_tariff(
             "id": str(tariff.id),
             "room_id": str(tariff.room_id),
             "rate_type": tariff.rate_type,
-            "price_per_night": float(tariff.price_per_night),
+            "price_per_night": await _effective_price(tariff, db),
             "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
             "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
         }
@@ -140,7 +167,7 @@ async def update_tariff(
             "id": str(tariff.id),
             "room_id": str(tariff.room_id),
             "rate_type": tariff.rate_type,
-            "price_per_night": float(tariff.price_per_night),
+            "price_per_night": await _effective_price(tariff, db),
             "start_date": tariff.start_date.isoformat() if tariff.start_date else None,
             "end_date": tariff.end_date.isoformat() if tariff.end_date else None,
         },

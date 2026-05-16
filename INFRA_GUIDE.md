@@ -107,6 +107,31 @@ curl -sk https://<ELB_URL>/api/v1/bookings/hotel
 curl -sk https://<ELB_URL>/api/v1/cart -H "X-User-Id: c1000000-0000-0000-0000-000000000001"
 ```
 
+### 8.1. IRSA policy sanity check
+
+`terraform apply` will succeed even if a role is missing a policy attachment — the missing publish/consume right surfaces only at runtime as a silently-swallowed `AuthorizationError`. Diff each role against the expected set:
+
+```bash
+for role in inventory search payment booking notification; do
+  echo "--- $role ---"
+  aws iam list-attached-role-policies \
+    --role-name proyecto-final-dev-${role}-service-role \
+    --query 'AttachedPolicies[].PolicyName' --output text
+done
+```
+
+Expected attachments:
+
+| Role | Policies (must include) |
+|---|---|
+| `inventory-service-role` | `sqs-access`, `sns-publish-access` |
+| `search-service-role` | `sqs-access` |
+| `payment-service-role` | `sns-publish-access` |
+| `booking-service-role` | `payment-booking-sqs-access`, `sns-publish-access` |
+| `notification-service-role` | `notification-sqs-access`, `sns-publish-access` |
+
+Any role that publishes (`payment`, `booking`, `inventory`, `notification`) **must** carry `sns-publish-access`. The historical bug that motivated this check: `booking-service-role` was missing it, so booking-worker silently dropped every `booking_created` event and no confirmation emails were sent.
+
 ---
 
 ## 🔴 Destroy (~15 min)
@@ -204,3 +229,4 @@ kubectl config delete-context arn:aws:eks:us-east-1:618246140762:cluster/proyect
 - **ELB URL changes** — update the frontend `.env` and mobile `.env` with the new URL after redeploy
 - **Frontend (CloudFront/S3)** is managed by separate Terraform in `travelhub-prototype/infrastructure/terraform/` — not destroyed here
 - **Pod limit** — t3.small supports max 11 pods (4 are system). Keep 6-7 app pods max
+- **Python workers need explicit logging setup** — any deployment that runs `python workers/*.py` (i.e. not behind `uvicorn`) must set `PYTHONUNBUFFERED=1` (or use `python -u`) AND call `logging.basicConfig(level=logging.INFO)` at the top of the entrypoint. Without both, `kubectl logs` returns empty and verification steps in §8 can't detect failures. The pattern is already applied to `booking-worker.yaml` / `workers/sqs_worker.py` — copy it for any new worker.

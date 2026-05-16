@@ -90,6 +90,44 @@ class Payment(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Refund-tracking columns (HU4.3). NULL when the payment was never refunded.
+    # processed_at stays as the original approval timestamp; refunded_at marks
+    # the moment the refund was applied so the timeline of the payment stays
+    # auditable.
+    refund_amount: Mapped[float | None] = mapped_column(DECIMAL(12, 2), nullable=True)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class FraudAlert(Base):
+    """Alert emitted by the fraud detection engine (HU4.7).
+
+    The detector evaluates each transaction and, if any rule is triggered,
+    records the result here for the admin to review. Lifecycle:
+
+      pending → approved          (admin OK'd the transaction)
+      pending → confirmed_block   (admin confirmed it was fraudulent)
+    """
+
+    __tablename__ = "fraud_alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    payment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payments.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Free-form for now to avoid a migration when we add new rules; the
+    # service layer constrains it to: duplicate, velocity, threed_secure_failed.
+    alert_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), nullable=False, default="high")
+    triggered_reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    # pending | approved | confirmed_block
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class ExchangeRate(Base):

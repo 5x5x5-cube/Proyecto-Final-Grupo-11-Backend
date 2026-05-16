@@ -42,4 +42,4 @@ awslocal sns subscribe --topic-arn $TOPIC_ARN --protocol sqs \
 
 awslocal sns subscribe --topic-arn $TOPIC_ARN --protocol sqs \
   --notification-endpoint arn:aws:sqs:us-east-1:000000000000:notification-queue \
-  --attributes '{"FilterPolicy":"{\"entity_type\":[\"payment\"]}","RawMessageDelivery":"true"}'
+  --attributes '{"FilterPolicy":"{\"entity_type\":[\"payment\",\"booking\"]}","RawMessageDelivery":"true"}'

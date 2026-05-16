@@ -12,6 +12,7 @@ from app.database import async_session_factory
 from app.models import Booking
 from app.schemas import CreateBookingRequest
 from app.services.booking_service import create_booking
+from app.services.sns_publisher import sns_publisher
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -72,21 +73,33 @@ class SQSConsumer:
                     taxAmount=booking_data.get("taxAmount"),
                     serviceFee=booking_data.get("serviceFee", "0"),
                     totalPrice=booking_data.get("totalPrice"),
+                    locale=booking_data.get("locale"),
+                    currency=payment.get("currency", "COP"),
                 )
 
-                await create_booking(
+                booking_response = await create_booking(
                     db=session,
                     user_id=uuid.UUID(user_id_str),
                     request=request,
                 )
                 logger.info("Booking created for userId=%s, holdId=%s", user_id_str, hold_id)
 
+            # Publish lean booking_created event for downstream consumers
+            try:
+                await sns_publisher.publish_booking_created(
+                    booking_id=str(booking_response.id),
+                    user_id=user_id_str,
+                    payment_id=payment_id_str or "",
+                )
+            except Exception as e:
+                logger.warning("Failed to publish booking_created event: %s", e)
+
             # Post-payment: confirm hold in inventory (best-effort)
             if hold_id:
                 try:
                     async with httpx.AsyncClient(timeout=10) as client:
                         resp = await client.put(
-                            f"{settings.inventory_service_url}/holds/{hold_id}/confirm"
+                            f"{settings.inventory_service_url}/api/v1/inventory/holds/{hold_id}/confirm"
                         )
                         resp.raise_for_status()
                         logger.info("Hold %s confirmed in inventory", hold_id)

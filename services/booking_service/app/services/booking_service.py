@@ -20,6 +20,7 @@ from ..schemas import (
     PriceBreakdown,
     UpdateBookingStatusRequest,
 )
+from .payment_client import PaymentServiceError, request_refund
 from .sns_publisher import sns_publisher
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,9 @@ def build_booking_response(
         checkOut=booking.check_out,
         guests=booking.guests,
         status=booking.status,
+        basePrice=float(booking.base_price),
+        taxAmount=float(booking.tax_amount),
+        serviceFee=float(booking.service_fee),
         totalPrice=float(booking.total_price),
         currency=booking.currency,
         priceBreakdown=price_breakdown,
@@ -97,6 +101,7 @@ def build_booking_response(
         guestEmail=booking.guest_email,
         guestPhone=booking.guest_phone,
         nights=max((booking.check_out - booking.check_in).days, 1),
+        locale=booking.locale,
         timeline=_build_timeline(booking),
     )
 
@@ -127,6 +132,8 @@ async def create_booking(
         guest_name=request.guest_name,
         guest_email=request.guest_email,
         guest_phone=request.guest_phone,
+        locale=request.locale,
+        currency=request.currency,
     )
     db.add(booking)
     await db.commit()
@@ -145,11 +152,15 @@ async def _fetch_inventory_data(
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             for hid in hotel_ids:
-                resp = await client.get(f"{settings.inventory_service_url}/hotels/{hid}")
+                resp = await client.get(
+                    f"{settings.inventory_service_url}/api/v1/inventory/hotels/{hid}"
+                )
                 if resp.status_code == 200:
                     hotels[str(hid)] = resp.json()
             for rid in room_ids:
-                resp = await client.get(f"{settings.inventory_service_url}/rooms/{rid}")
+                resp = await client.get(
+                    f"{settings.inventory_service_url}/api/v1/inventory/rooms/{rid}"
+                )
                 if resp.status_code == 200:
                     rooms[str(rid)] = resp.json()
     except Exception as e:  # nosec B110
@@ -307,7 +318,14 @@ async def update_booking_status(
     hotel_id: uuid.UUID,
     request: UpdateBookingStatusRequest,
 ) -> BookingResponse:
-    """Confirm or reject a pending booking for a given hotel."""
+    """Confirm or reject a pending booking for a given hotel.
+
+    HU4.3 follow-up: when the hotel rejects a booking that already has an
+    approved payment, the traveler must receive a full refund (no policy
+    applies — the cancellation was not the traveler's decision). The
+    traveler-initiated cancel path lives in ``POST /bookings/{id}/cancel``
+    and is untouched by this function.
+    """
     result = await db.execute(select(Booking).where(Booking.id == booking_id))
     booking = result.scalar_one_or_none()
     if not booking:
@@ -317,24 +335,64 @@ async def update_booking_status(
     if booking.status != "pending":
         raise BookingAlreadyProcessedError(str(booking_id), booking.status)
 
+    previous_status = booking.status
     new_status = "confirmed" if request.action == "confirm" else "rejected"
     booking.status = new_status
 
     await db.commit()
     await db.refresh(booking)
 
-    # Get hotel name from inventory service
+    # Hotel-reject + paid booking → trigger a 100% refund and reuse the
+    # booking.cancelled fan-out so inventory_service releases the room and
+    # notification_service alerts the traveler with the refund amount.
+    # If there's no payment_id (defensive, rare) we keep the legacy
+    # status-updated event so we don't change behaviour for that edge case.
+    triggers_refund_flow = request.action == "reject" and booking.payment_id is not None
+
+    if triggers_refund_flow:
+        refund_amount = float(booking.total_price)
+        refund_status = "no_refund"
+        try:
+            await request_refund(
+                payment_id=booking.payment_id,
+                amount=refund_amount,
+                reason="hotel_rejected",
+            )
+            refund_status = "processed"
+        except PaymentServiceError:
+            # Booking is already rejected; surface a flagged refund state to
+            # the notification handler so the traveler can be told and ops
+            # can retry. Do NOT roll back the rejection.
+            refund_status = "failed"
+
+        await sns_publisher.publish_booking_cancelled(
+            booking_id=str(booking.id),
+            user_id=str(booking.user_id),
+            room_id=str(booking.room_id),
+            hotel_id=str(booking.hotel_id),
+            check_in=booking.check_in.isoformat(),
+            check_out=booking.check_out.isoformat(),
+            currency=booking.currency,
+            refund_amount=str(refund_amount),
+            refund_percentage=1.0,
+            refund_status=refund_status,
+            previous_status=previous_status,
+        )
+        return build_booking_response(booking)
+
+    # Confirm OR reject-without-payment: keep the existing notification path.
     hotel_name = "Hotel"
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.inventory_service_url}/hotels/{hotel_id}")
+            response = await client.get(
+                f"{settings.inventory_service_url}/api/v1/inventory/hotels/{hotel_id}"
+            )
             if response.status_code == 200:
                 hotel_data = response.json()
                 hotel_name = hotel_data.get("name", "Hotel")
     except Exception as e:
         print(f"Error fetching hotel name: {e}")
 
-    # Publish event to SNS
     await sns_publisher.publish_booking_status_updated(
         booking_id=str(booking.id),
         user_id=str(booking.user_id),

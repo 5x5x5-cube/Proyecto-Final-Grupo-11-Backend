@@ -1,48 +1,82 @@
-"""Generic async reverse proxy for forwarding requests to backend services."""
+"""Async reverse proxy with auth resolution for the API gateway."""
 
 import logging
 
 import httpx
 from fastapi import Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
+from .auth import resolve_hotel_admin, resolve_traveler
 from .config import settings
+from .route_config import AuthMode, get_auth_mode
 
 logger = logging.getLogger(__name__)
 
+# Headers the client must never set — only the gateway injects these.
+STRIPPED_HEADERS = {"x-user-id", "x-hotel-id", "x-user-role"}
+HOP_BY_HOP = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
+
+
+def _extract_bearer_token(headers: dict[str, str]) -> str | None:
+    auth = headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
 
 async def proxy_request(request: Request, target_base_url: str) -> Response:
-    """
-    Forward an incoming request to a backend service, preserving:
-    - HTTP method
-    - Path (full path including /api/v1)
-    - Query parameters
-    - Headers (minus hop-by-hop headers)
-    - Request body
-
-    Returns the upstream response as-is.
-    """
-    # Build the target URL: base + original path + query string
+    """Forward a request to a backend service with auth resolution."""
     target_url = f"{target_base_url}{request.url.path}"
     if request.url.query:
         target_url = f"{target_url}?{request.url.query}"
 
-    # Read the request body
     body = await request.body()
 
-    # Filter out hop-by-hop headers
-    hop_by_hop = {"host", "connection", "keep-alive", "transfer-encoding", "te", "upgrade"}
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in hop_by_hop}
+    # Build headers: strip hop-by-hop and identity headers
+    headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in HOP_BY_HOP and k.lower() not in STRIPPED_HEADERS
+    }
 
-    # Inject default X-User-Id when no auth service exists yet
-    if "x-user-id" not in headers and settings.default_user_id:
-        headers["X-User-Id"] = settings.default_user_id
+    # --- Auth resolution ---
+    mode = get_auth_mode(request.method, request.url.path)
+    token = _extract_bearer_token(dict(request.headers))
 
-    # Inject default X-Hotel-Id when no auth service exists yet
-    if "x-hotel-id" not in headers and settings.default_hotel_id:
-        headers["X-Hotel-Id"] = settings.default_hotel_id
+    if mode == AuthMode.TRAVELER:
+        if not token:
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        user = await resolve_traveler(token, settings.auth_service_url)
+        if not user:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+        headers["X-User-Id"] = user["user_id"]
+        headers["X-User-Role"] = user["role"]
 
-    logger.info(f"Proxying {request.method} {request.url.path} -> {target_url}")
+    elif mode == AuthMode.HOTEL_ADMIN:
+        if not token:
+            return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        admin = await resolve_hotel_admin(
+            token, settings.auth_service_url, settings.inventory_service_url
+        )
+        if not admin:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Hotel admin access required"},
+            )
+        headers["X-User-Id"] = admin["user_id"]
+        headers["X-User-Role"] = admin["role"]
+        headers["X-Hotel-Id"] = admin["hotel_id"]
+
+    elif mode == AuthMode.OPTIONAL_AUTH:
+        if token:
+            user = await resolve_traveler(token, settings.auth_service_url)
+            if user:
+                headers["X-User-Id"] = user["user_id"]
+                headers["X-User-Role"] = user["role"]
+
+    # PUBLIC mode: no auth processing
+
+    logger.info("Proxying %s %s -> %s [%s]", request.method, request.url.path, target_url, mode)
 
     async with httpx.AsyncClient(timeout=30) as client:
         upstream_response = await client.request(
@@ -52,7 +86,6 @@ async def proxy_request(request: Request, target_base_url: str) -> Response:
             content=body if body else None,
         )
 
-    # Build response, preserving upstream status and body
     excluded_headers = {"content-encoding", "content-length", "transfer-encoding"}
     response_headers = {
         k: v for k, v in upstream_response.headers.items() if k.lower() not in excluded_headers

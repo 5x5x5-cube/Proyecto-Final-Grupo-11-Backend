@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: notification-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::618246140762:role/proyecto-final-dev-notification-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::735566955557:role/proyecto-final-dev-notification-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: notification-service-sa
       containers:
       - name: notification-service
-        image: 618246140762.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-notification-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-notification-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -38,7 +38,7 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: redis-url
-        - name: NOTIFICATION_QUEUE_URL
+        - name: SQS_QUEUE_URL
           valueFrom:
             configMapKeyRef:
               name: shared-infra-config
@@ -58,6 +58,20 @@ spec:
             secretKeyRef:
               name: notification-service-secrets
               key: expo-access-token
+        - name: SMTP_HOST
+          value: "mailpit"
+        - name: SMTP_PORT
+          value: "1025"
+        - name: SMTP_FROM_EMAIL
+          value: "noreply@travelhub.com"
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service"
+        - name: BOOKING_SERVICE_URL
+          value: "http://booking-service"
+        - name: PAYMENT_SERVICE_URL
+          value: "http://payment-service"
+        - name: INVENTORY_SERVICE_URL
+          value: "http://inventory-service"
         livenessProbe:
           httpGet:
             path: /health

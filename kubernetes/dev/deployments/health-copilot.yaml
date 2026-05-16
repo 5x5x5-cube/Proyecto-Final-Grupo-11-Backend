@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-copilot
+  labels:
+    app: health-copilot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: health-copilot
+  template:
+    metadata:
+      labels:
+        app: health-copilot
+    spec:
+      containers:
+      - name: health-copilot
+        image: proyecto-final-grupo-11-backend-health-copilot:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-copilot
+spec:
+  selector:
+    app: health-copilot
+  ports:
+  - port: 80
+    targetPort: 8000

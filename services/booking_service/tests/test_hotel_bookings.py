@@ -1,14 +1,16 @@
 """Router-level tests for hotel admin booking endpoints."""
 
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
 from app.database import get_db
 from app.main import app
 from app.models import Booking
+from app.services.payment_client import PaymentServiceError
 
 BOOKING_ID = uuid.UUID("e1000000-0000-0000-0000-000000000001")
 USER_ID = uuid.UUID("c1000000-0000-0000-0000-000000000001")
@@ -24,13 +26,14 @@ BASE_URL = "http://test"
 STATUS_URL = f"/api/v1/bookings/hotel/{BOOKING_ID}/status"
 
 
-def _make_booking(status="pending", hotel_id=None):
+def _make_booking(status="pending", hotel_id=None, payment_id=None):
     return Booking(
         id=BOOKING_ID,
         code="BK-ABCD1234",
         user_id=USER_ID,
         hotel_id=hotel_id or HOTEL_ID,
         room_id=ROOM_ID,
+        payment_id=payment_id,
         check_in=CHECK_IN,
         check_out=CHECK_OUT,
         guests=2,
@@ -43,6 +46,23 @@ def _make_booking(status="pending", hotel_id=None):
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
+
+
+@contextmanager
+def _patched_refund_side_effects(refund_side_effect=None):
+    """Patch request_refund and the booking.cancelled publisher so reject-with-
+    refund tests don't try to hit the payment_service over the network.
+
+    Yields (refund_mock, sns_mock).
+    """
+    refund_mock = AsyncMock(return_value={"status": "refunded"})
+    if refund_side_effect is not None:
+        refund_mock.side_effect = refund_side_effect
+    sns_mock = AsyncMock(return_value=True)
+    with patch("app.services.booking_service.request_refund", refund_mock), patch(
+        "app.services.booking_service.sns_publisher.publish_booking_cancelled", sns_mock
+    ):
+        yield refund_mock, sns_mock
 
 
 def _mock_db(booking):
@@ -105,6 +125,96 @@ async def test_reject_already_processed_409():
         app.dependency_overrides.clear()
 
     assert resp.status_code == 409
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# HU4.3 follow-up — hotel reject on a paid booking triggers a 100% refund
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def test_reject_with_payment_id_triggers_full_refund():
+    payment_id = uuid.uuid4()
+    booking = _make_booking(payment_id=payment_id)
+    app.dependency_overrides[get_db] = lambda: _mock_db(booking)
+    try:
+        with _patched_refund_side_effects() as (refund_mock, sns_mock):
+            resp = await _post({"action": "reject"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rejected"
+
+    # 100% of total_price refunded (no policy — hotel rejected, not the user)
+    refund_mock.assert_awaited_once()
+    kwargs = refund_mock.call_args.kwargs
+    assert kwargs["payment_id"] == payment_id
+    assert kwargs["amount"] == 595000.0
+    assert kwargs["reason"] == "hotel_rejected"
+
+    # booking.cancelled event so inventory frees the room and notification
+    # tells the traveler the refund amount
+    sns_mock.assert_awaited_once()
+    event = sns_mock.call_args.kwargs
+    assert event["refund_status"] == "processed"
+    assert event["refund_percentage"] == 1.0
+    assert event["previous_status"] == "pending"
+
+
+async def test_reject_without_payment_id_skips_refund():
+    """Edge case: a rejected booking without a payment_id (legacy / test data)
+    must keep the legacy notification path and not blow up on a missing FK."""
+    booking = _make_booking(payment_id=None)
+    app.dependency_overrides[get_db] = lambda: _mock_db(booking)
+    try:
+        with _patched_refund_side_effects() as (refund_mock, sns_mock):
+            resp = await _post({"action": "reject"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rejected"
+    # Neither the refund nor the cancelled event are fired in this branch
+    refund_mock.assert_not_called()
+    sns_mock.assert_not_called()
+
+
+async def test_reject_with_failed_refund_still_rejects_and_flags_event():
+    """If payment_service rejects the refund call, the booking stays rejected
+    and the SNS event carries refund_status=failed so the user gets a clear
+    signal and ops can retry."""
+    payment_id = uuid.uuid4()
+    booking = _make_booking(payment_id=payment_id)
+    app.dependency_overrides[get_db] = lambda: _mock_db(booking)
+    try:
+        with _patched_refund_side_effects(
+            refund_side_effect=PaymentServiceError("boom", status_code=400)
+        ) as (_, sns_mock):
+            resp = await _post({"action": "reject"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rejected"
+    sns_mock.assert_awaited_once()
+    assert sns_mock.call_args.kwargs["refund_status"] == "failed"
+
+
+async def test_confirm_with_payment_id_does_not_trigger_refund():
+    """Confirm path must never call /refund — only reject triggers the flow."""
+    payment_id = uuid.uuid4()
+    booking = _make_booking(payment_id=payment_id)
+    app.dependency_overrides[get_db] = lambda: _mock_db(booking)
+    try:
+        with _patched_refund_side_effects() as (refund_mock, sns_mock):
+            resp = await _post({"action": "confirm"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "confirmed"
+    refund_mock.assert_not_called()
+    sns_mock.assert_not_called()
 
 
 async def test_missing_header_401():

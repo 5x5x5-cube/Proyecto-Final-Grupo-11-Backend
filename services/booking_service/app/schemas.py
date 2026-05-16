@@ -20,6 +20,8 @@ class CreateBookingRequest(BaseModel):
     guest_name: str | None = Field(None, alias="guestName", max_length=200)
     guest_email: str | None = Field(None, alias="guestEmail", max_length=254)
     guest_phone: str | None = Field(None, alias="guestPhone", max_length=30)
+    locale: str | None = Field(None)
+    currency: str = Field("COP")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -56,6 +58,9 @@ class BookingResponse(BaseModel):
     check_out: date = Field(..., alias="checkOut")
     guests: int
     status: str
+    base_price: float = Field(0, alias="basePrice")
+    tax_amount: float = Field(0, alias="taxAmount")
+    service_fee: float = Field(0, alias="serviceFee")
     total_price: float = Field(..., alias="totalPrice")
     currency: str
     price_breakdown: PriceBreakdown | None = Field(None, alias="priceBreakdown")
@@ -68,6 +73,7 @@ class BookingResponse(BaseModel):
     room_name: str | None = Field(None, alias="roomName")
     location: str | None = Field(None)
     nights: int = Field(0)
+    locale: str | None = Field(None)
     timeline: list[BookingTimelineEvent] = Field(default_factory=list)
 
 

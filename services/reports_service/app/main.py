@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Reports Service", description="Reports Generation Service", version="0.1.0")
+from .routers import revenue
+
+app = FastAPI(title="Reports Service", description="Reports Generation Service", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -11,12 +13,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
+app.include_router(revenue.router)
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "reports-service", "version": "0.1.0"}
+    return {"status": "healthy", "service": "reports-service", "version": "0.2.0"}
 
 
 @app.get("/")
 async def root():
-    return {"service": "reports-service", "message": "Reports Generation Service"}
+    return {
+        "service": "reports-service",
+        "message": "Reports Generation Service",
+        "version": "0.2.0",
+        "endpoints": {
+            "monthly_revenue": "/api/v1/reports/revenue/monthly",
+            "available_periods": "/api/v1/reports/revenue/available-periods",
+            "download_report": "/api/v1/reports/revenue/download",
+            "health": "/health",
+        },
+    }

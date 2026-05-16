@@ -20,6 +20,8 @@ class Hotel(Base):
     country: Mapped[str | None] = mapped_column(String(100))
     address: Mapped[str | None] = mapped_column(String(255))
     rating: Mapped[float | None] = mapped_column(DECIMAL(2, 1))
+    image_url: Mapped[str | None] = mapped_column(Text)
+    images: Mapped[list | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(20), default="active")
     admin_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -43,6 +45,7 @@ class Room(Base):
     tax_rate: Mapped[float] = mapped_column(DECIMAL(5, 4), default=0.19)
     description: Mapped[str | None] = mapped_column(Text)
     amenities: Mapped[dict | None] = mapped_column(JSONB)
+    images: Mapped[list | None] = mapped_column(JSONB)
     total_quantity: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -116,6 +119,28 @@ class Tariff(Base):
     )
 
     room: Mapped["Room"] = relationship(back_populates="tariffs")
+    discounts: Mapped[list["Discount"]] = relationship(
+        back_populates="tariff", cascade="all, delete-orphan"
+    )
 
 
-__all__ = ["Hotel", "Room", "Availability", "Hold", "Tariff", "Base"]
+class Discount(Base):
+    __tablename__ = "discounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tariff_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tariffs.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(20), nullable=False)  # percentage | fixed
+    value: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    tariff: Mapped["Tariff"] = relationship(back_populates="discounts")
+
+
+__all__ = ["Hotel", "Room", "Availability", "Hold", "Tariff", "Discount", "Base"]

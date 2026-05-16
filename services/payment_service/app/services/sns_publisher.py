@@ -66,5 +66,10 @@ class SNSPublisher:
     async def publish_payment_declined(self, payment_data: Dict[str, Any]) -> bool:
         return await self.publish_event("payment_declined", "payment", payment_data)
 
+    async def publish_fraud_detected(self, alert_data: Dict[str, Any]) -> bool:
+        """Fan-out a fraud_detected event — consumed by notification_service to
+        alert the admin (HU4.7 CA4)."""
+        return await self.publish_event("fraud_detected", "fraud_alert", alert_data)
+
 
 sns_publisher = SNSPublisher()

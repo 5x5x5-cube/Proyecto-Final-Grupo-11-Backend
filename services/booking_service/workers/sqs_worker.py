@@ -4,9 +4,15 @@ SQS Worker for Booking Service
 """
 
 import asyncio
+import logging
 import sys
 import time
 from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 # Add parent directory to path to import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent))

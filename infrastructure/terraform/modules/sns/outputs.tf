@@ -23,6 +23,11 @@ output "payment_booking_sqs_access_policy_arn" {
   value       = aws_iam_policy.payment_booking_sqs_access.arn
 }
 
+output "notification_sqs_access_policy_arn" {
+  description = "ARN of the notification SQS access IAM policy"
+  value       = aws_iam_policy.notification_sqs_access.arn
+}
+
 output "notification_queue_url" {
   description = "Notification SQS queue URL"
   value       = aws_sqs_queue.notification.url
