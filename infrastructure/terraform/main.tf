@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "proyecto-final-tf-state-881005428234"
+    bucket         = "proyecto-final-tf-state-735566955557"
     key            = "eks/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
@@ -102,4 +102,5 @@ module "irsa" {
   sqs_access_policy_arn                 = module.sqs.sqs_access_policy_arn
   sns_publish_policy_arn                = module.sns.sns_publish_policy_arn
   payment_booking_sqs_access_policy_arn = module.sns.payment_booking_sqs_access_policy_arn
+  notification_sqs_access_policy_arn    = module.sns.notification_sqs_access_policy_arn
 }

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: gateway-service
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-gateway-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-gateway-service:latest
         ports:
         - containerPort: 8000
         env:

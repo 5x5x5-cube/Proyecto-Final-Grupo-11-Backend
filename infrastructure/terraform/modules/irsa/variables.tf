@@ -32,3 +32,8 @@ variable "payment_booking_sqs_access_policy_arn" {
   description = "ARN of the payment-booking SQS access IAM policy"
   type        = string
 }
+
+variable "notification_sqs_access_policy_arn" {
+  description = "ARN of the notification SQS access IAM policy"
+  type        = string
+}

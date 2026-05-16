@@ -22,14 +22,20 @@ Todo el tráfico `/api/v1/*` pasa por el **gateway-service**, que:
 2. **Terraform** >= 1.0
 3. **kubectl** instalado
 4. **Docker Desktop** con soporte para `--platform linux/amd64`
-5. **Credenciales AWS** configuradas:
+5. **Credenciales AWS** configuradas con el perfil **`ronald`** (cuenta de despliegue del proyecto: `735566955557`):
    ```bash
-   aws configure --profile maestria
+   aws configure --profile ronald
    # AWS Access Key ID: <tu-key>
    # AWS Secret Access Key: <tu-secret>
    # Default region name: us-east-1
    # Default output format: json
+
+   # Verificar cuenta correcta
+   aws sts get-caller-identity --profile ronald
+   # "Account": "735566955557"
    ```
+
+> **Nota:** El perfil `maestria` apunta a otra cuenta AWS (`881005428234`) sin infraestructura desplegada. Usar siempre `ronald` para este proyecto.
 
 ---
 
@@ -41,14 +47,14 @@ El state de Terraform se almacena en S3. El nombre del bucket debe ser globalmen
 
 ```bash
 # Crear bucket S3 para state (usar tu account ID para unicidad)
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --profile maestria --query Account --output text)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --profile ronald --query Account --output text)
 
-aws s3 mb s3://proyecto-final-tf-state-${AWS_ACCOUNT_ID} --region us-east-1 --profile maestria
+aws s3 mb s3://proyecto-final-tf-state-${AWS_ACCOUNT_ID} --region us-east-1 --profile ronald
 
 aws s3api put-bucket-versioning \
   --bucket proyecto-final-tf-state-${AWS_ACCOUNT_ID} \
   --versioning-configuration Status=Enabled \
-  --profile maestria
+  --profile ronald
 
 # Crear tabla DynamoDB para locks
 aws dynamodb create-table \
@@ -57,7 +63,7 @@ aws dynamodb create-table \
   --key-schema AttributeName=LockID,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST \
   --region us-east-1 \
-  --profile maestria
+  --profile ronald
 ```
 
 > **IMPORTANTE**: Actualizar el bucket name en `infrastructure/terraform/main.tf` → backend "s3" → bucket.
@@ -66,9 +72,9 @@ aws dynamodb create-table \
 
 ```bash
 cd infrastructure/terraform
-AWS_PROFILE=maestria terraform init
-AWS_PROFILE=maestria terraform plan -var-file=terraform.tfvars
-AWS_PROFILE=maestria terraform apply -var-file=terraform.tfvars
+AWS_PROFILE=ronald terraform init
+AWS_PROFILE=ronald terraform plan -var-file=terraform.tfvars
+AWS_PROFILE=ronald terraform apply -var-file=terraform.tfvars
 # Escribir "yes" cuando pregunte
 ```
 
@@ -84,7 +90,7 @@ Terraform crea:
 
 > Si falla con error `ResourceInUseException` en EKS Access Entry, importar:
 > ```bash
-> AWS_PROFILE=maestria terraform import 'module.eks.aws_eks_access_entry.admin' \
+> AWS_PROFILE=ronald terraform import 'module.eks.aws_eks_access_entry.admin' \
 >   'proyecto-final-dev:arn:aws:iam::<ACCOUNT_ID>:root'
 > ```
 > Luego re-ejecutar `terraform apply`.
@@ -94,8 +100,8 @@ Terraform crea:
 ### Paso 3: Configurar kubectl
 
 ```bash
-AWS_PROFILE=maestria aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1
-AWS_PROFILE=maestria kubectl get nodes  # debe mostrar 2 nodos Ready
+AWS_PROFILE=ronald aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1
+AWS_PROFILE=ronald kubectl get nodes  # debe mostrar 2 nodos Ready
 ```
 
 ### Paso 4: Crear Secrets y ConfigMaps
@@ -104,16 +110,16 @@ AWS_PROFILE=maestria kubectl get nodes  # debe mostrar 2 nodos Ready
 cd infrastructure/terraform
 
 # Obtener outputs de Terraform
-DB_ENDPOINT=$(AWS_PROFILE=maestria terraform output -raw rds_endpoint)
-DB_NAME=$(AWS_PROFILE=maestria terraform output -raw rds_database_name)
-REDIS_ENDPOINT=$(AWS_PROFILE=maestria terraform output -raw redis_endpoint)
-HOTEL_SYNC_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sqs_hotel_sync_queue_url)
-SNS_TOPIC_ARN=$(AWS_PROFILE=maestria terraform output -raw sns_topic_arn)
-PAYMENT_BOOKING_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sns_payment_booking_queue_url)
-NOTIFICATION_QUEUE_URL=$(AWS_PROFILE=maestria terraform output -raw sns_notification_queue_url)
+DB_ENDPOINT=$(AWS_PROFILE=ronald terraform output -raw rds_endpoint)
+DB_NAME=$(AWS_PROFILE=ronald terraform output -raw rds_database_name)
+REDIS_ENDPOINT=$(AWS_PROFILE=ronald terraform output -raw redis_endpoint)
+HOTEL_SYNC_QUEUE_URL=$(AWS_PROFILE=ronald terraform output -raw sqs_hotel_sync_queue_url)
+SNS_TOPIC_ARN=$(AWS_PROFILE=ronald terraform output -raw sns_topic_arn)
+PAYMENT_BOOKING_QUEUE_URL=$(AWS_PROFILE=ronald terraform output -raw sns_payment_booking_queue_url)
+NOTIFICATION_QUEUE_URL=$(AWS_PROFILE=ronald terraform output -raw sns_notification_queue_url)
 
 # Obtener contraseña de DB
-DB_PASSWORD=$(AWS_PROFILE=maestria aws secretsmanager get-secret-value \
+DB_PASSWORD=$(AWS_PROFILE=ronald aws secretsmanager get-secret-value \
   --secret-id proyecto-final-dev-db-password --region us-east-1 \
   --query SecretString --output text)
 
@@ -125,38 +131,38 @@ REDIS_URL="redis://${REDIS_ENDPOINT}:6379"
 
 # Secrets (database-url por servicio)
 for SVC in auth-service inventory-service cart-service payment-service booking-service; do
-    AWS_PROFILE=maestria kubectl create secret generic ${SVC}-secrets \
+    AWS_PROFILE=ronald kubectl create secret generic ${SVC}-secrets \
       --from-literal=database-url="$DATABASE_URL" \
-      --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+      --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 done
 
 # Notification service necesita expo-access-token adicional
-AWS_PROFILE=maestria kubectl create secret generic notification-service-secrets \
+AWS_PROFILE=ronald kubectl create secret generic notification-service-secrets \
   --from-literal=database-url="$DATABASE_URL" \
   --from-literal=expo-access-token="<tu-expo-token>" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
 # ConfigMaps por servicio
-AWS_PROFILE=maestria kubectl create configmap cart-service-config \
+AWS_PROFILE=ronald kubectl create configmap cart-service-config \
   --from-literal=redis-url="$REDIS_URL" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
-AWS_PROFILE=maestria kubectl create configmap notification-service-config \
+AWS_PROFILE=ronald kubectl create configmap notification-service-config \
   --from-literal=redis-url="$REDIS_URL" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
-AWS_PROFILE=maestria kubectl create configmap inventory-service-config \
+AWS_PROFILE=ronald kubectl create configmap inventory-service-config \
   --from-literal=redis-url="$REDIS_URL" \
   --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
-AWS_PROFILE=maestria kubectl create configmap search-service-config \
+AWS_PROFILE=ronald kubectl create configmap search-service-config \
   --from-literal=redis-url="$REDIS_URL" \
   --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
 # Shared ConfigMaps (usados por múltiples servicios)
-AWS_PROFILE=maestria kubectl create configmap shared-infra-config \
+AWS_PROFILE=ronald kubectl create configmap shared-infra-config \
   --from-literal=redis-url="$REDIS_URL" \
   --from-literal=sqs-queue-url="$HOTEL_SYNC_QUEUE_URL" \
   --from-literal=sns-topic-arn="$SNS_TOPIC_ARN" \
@@ -164,9 +170,9 @@ AWS_PROFILE=maestria kubectl create configmap shared-infra-config \
   --from-literal=notification-queue-url="$NOTIFICATION_QUEUE_URL" \
   --from-literal=aws-region="us-east-1" \
   --from-literal=aws-endpoint-url="" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 
-AWS_PROFILE=maestria kubectl create configmap shared-service-discovery \
+AWS_PROFILE=ronald kubectl create configmap shared-service-discovery \
   --from-literal=inventory-service-url="http://inventory-service:80" \
   --from-literal=booking-service-url="http://booking-service:80" \
   --from-literal=cart-service-url="http://cart-service:80" \
@@ -176,7 +182,7 @@ AWS_PROFILE=maestria kubectl create configmap shared-service-discovery \
   --from-literal=payment-service-url="http://payment-service:80" \
   --from-literal=reports-service-url="http://reports-service:80" \
   --from-literal=commercial-service-url="http://commercial-service:80" \
-  --dry-run=client -o yaml | AWS_PROFILE=maestria kubectl apply -f -
+  --dry-run=client -o yaml | AWS_PROFILE=ronald kubectl apply -f -
 ```
 
 ### Paso 5: Construir y subir imágenes Docker
@@ -190,7 +196,7 @@ AWS_ACCOUNT_ID="<tu-account-id>"
 ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 
 # Login a ECR
-AWS_PROFILE=maestria aws ecr get-login-password --region us-east-1 | \
+AWS_PROFILE=ronald aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin $ECR_REGISTRY
 
 # Build y push todos los servicios
@@ -220,11 +226,11 @@ done
 ### Paso 6: Instalar NGINX Ingress Controller
 
 ```bash
-AWS_PROFILE=maestria kubectl apply -f \
+AWS_PROFILE=ronald kubectl apply -f \
   https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/aws/deploy.yaml
 
 # Esperar a que esté listo (~1-2 min)
-AWS_PROFILE=maestria kubectl wait --namespace ingress-nginx \
+AWS_PROFILE=ronald kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
   --timeout=120s
@@ -234,20 +240,20 @@ AWS_PROFILE=maestria kubectl wait --namespace ingress-nginx \
 
 ```bash
 # Aplicar todos los deployments
-AWS_PROFILE=maestria kubectl apply -f kubernetes/deployments/
+AWS_PROFILE=ronald kubectl apply -f kubernetes/deployments/
 
 # Aplicar ingress
-AWS_PROFILE=maestria kubectl apply -f kubernetes/ingress.yaml
+AWS_PROFILE=ronald kubectl apply -f kubernetes/ingress.yaml
 ```
 
 ### Paso 8: Verificar
 
 ```bash
-AWS_PROFILE=maestria kubectl get pods          # todos deben estar Running
-AWS_PROFILE=maestria kubectl get ingress       # ver URL del Load Balancer
+AWS_PROFILE=ronald kubectl get pods          # todos deben estar Running
+AWS_PROFILE=ronald kubectl get ingress       # ver URL del Load Balancer
 
 # Obtener URL del LB
-LB_URL=$(AWS_PROFILE=maestria kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+LB_URL=$(AWS_PROFILE=ronald kubectl get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 echo "API: http://$LB_URL"
 
 # Test rápido
@@ -260,7 +266,7 @@ curl http://$LB_URL/api/v1/search/destinations
 Mailpit captura todos los emails enviados por el notification-service sin entregarlos a buzones reales. Para acceder a la UI web:
 
 ```bash
-AWS_PROFILE=maestria kubectl port-forward svc/mailpit 8025:8025
+AWS_PROFILE=ronald kubectl port-forward svc/mailpit 8025:8025
 ```
 
 Luego abrir http://localhost:8025 en el navegador. Ahi se pueden ver todos los emails de confirmacion de pago enviados.
@@ -313,7 +319,7 @@ AWS_ACCOUNT_ID="<tu-account-id>"
 ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
 
 # Login a ECR
-AWS_PROFILE=maestria aws ecr get-login-password --region us-east-1 | \
+AWS_PROFILE=ronald aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin $ECR_REGISTRY
 
 # Build, push y restart un servicio
@@ -323,7 +329,7 @@ SERVICE_DIR="services/${SERVICE//-/_}"
 docker build --platform linux/amd64 \
   -t $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest $SERVICE_DIR
 docker push $ECR_REGISTRY/proyecto-final-dev-${SERVICE}:latest
-AWS_PROFILE=maestria kubectl rollout restart deployment/${SERVICE}
+AWS_PROFILE=ronald kubectl rollout restart deployment/${SERVICE}
 ```
 
 Mapeo de nombres (servicio → directorio):
@@ -345,12 +351,12 @@ Mapeo de nombres (servicio → directorio):
 
 ```bash
 # 1. Eliminar recursos de Kubernetes (libera el Load Balancer)
-AWS_PROFILE=maestria kubectl delete -f kubernetes/ingress.yaml 2>/dev/null
-AWS_PROFILE=maestria kubectl delete -f kubernetes/deployments/ 2>/dev/null
+AWS_PROFILE=ronald kubectl delete -f kubernetes/ingress.yaml 2>/dev/null
+AWS_PROFILE=ronald kubectl delete -f kubernetes/deployments/ 2>/dev/null
 
 # 2. Destruir infraestructura
 cd infrastructure/terraform
-AWS_PROFILE=maestria terraform destroy -var-file=terraform.tfvars
+AWS_PROFILE=ronald terraform destroy -var-file=terraform.tfvars
 # Escribir "yes" cuando pregunte
 ```
 
@@ -358,7 +364,7 @@ AWS_PROFILE=maestria terraform destroy -var-file=terraform.tfvars
 > Si falla por timeout: re-ejecutar `terraform destroy`.
 > Si queda un lock: `terraform force-unlock <LOCK-ID>`
 > Si el secret queda pendiente:
-> `aws secretsmanager delete-secret --secret-id proyecto-final-dev-db-password --region us-east-1 --force-delete-without-recovery --profile maestria`
+> `aws secretsmanager delete-secret --secret-id proyecto-final-dev-db-password --region us-east-1 --force-delete-without-recovery --profile ronald`
 
 ---
 
@@ -374,8 +380,8 @@ AWS_PROFILE=maestria terraform destroy -var-file=terraform.tfvars
 | `CreateContainerConfigError` | Falta Secret o ConfigMap. Verificar con `kubectl describe pod <pod>` |
 | `ImagePullBackOff` | Verificar `docker push` exitoso. Nombre ECR: `proyecto-final-dev-<servicio>` |
 | Pods en CrashLoopBackOff | `kubectl logs <pod>`. Puede ser DB migration o dependencia faltante |
-| kubectl 401 Unauthorized | `aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1 --profile maestria` |
+| kubectl 401 Unauthorized | `aws eks update-kubeconfig --name proyecto-final-dev --region us-east-1 --profile ronald` |
 | Cart/Booking 401 desde cliente | Verificar que el cliente envía `Authorization: Bearer <token>`. Gateway valida el token via auth-service |
 | Hotel admin endpoints 403 | Verificar que el usuario tiene `role: hotel_admin` y está asociado a un hotel en inventory (`Hotel.admin_id`) |
 | Mac ARM: pods crash en EKS | Asegurar `--platform linux/amd64` en `docker build` |
-| Secret "scheduled for deletion" | `aws secretsmanager delete-secret --secret-id <id> --region us-east-1 --force-delete-without-recovery --profile maestria` |
+| Secret "scheduled for deletion" | `aws secretsmanager delete-secret --secret-id <id> --region us-east-1 --force-delete-without-recovery --profile ronald` |

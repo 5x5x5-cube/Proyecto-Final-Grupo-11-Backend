@@ -155,7 +155,7 @@ resource "aws_iam_role" "notification_service" {
 
 resource "aws_iam_role_policy_attachment" "notification_sqs" {
   role       = aws_iam_role.notification_service.name
-  policy_arn = var.sqs_access_policy_arn
+  policy_arn = var.notification_sqs_access_policy_arn
 }
 
 resource "aws_iam_role_policy_attachment" "notification_sns" {

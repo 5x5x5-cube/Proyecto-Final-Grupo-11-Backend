@@ -215,14 +215,14 @@ npm run dev
 
 ```bash
 cd services/reports_service
-docker build -t 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest .
+docker build -t 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest .
 ```
 
 ### **3. Push a ECR**
 
 ```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 881005428234.dkr.ecr.us-east-1.amazonaws.com
-docker push 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 735566955557.dkr.ecr.us-east-1.amazonaws.com
+docker push 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest
 ```
 
 ### **4. Deploy a Kubernetes**

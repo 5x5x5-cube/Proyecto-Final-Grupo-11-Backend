@@ -17,7 +17,7 @@ spec:
       serviceAccountName: booking-service-sa
       containers:
       - name: booking-worker
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
         command: ["python", "workers/sqs_worker.py"]
         env:
         - name: DATABASE_URL
@@ -30,6 +30,11 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: payment-booking-queue-url
+        - name: SNS_TOPIC_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: sns-topic-arn
         - name: AWS_REGION
           valueFrom:
             configMapKeyRef:
