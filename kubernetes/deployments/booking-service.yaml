@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: booking-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::881005428234:role/proyecto-final-dev-booking-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::735566955557:role/proyecto-final-dev-booking-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: booking-service-sa
       containers:
       - name: booking-service
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-booking-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -38,6 +38,21 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: redis-url
+        - name: SNS_TOPIC_ARN
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: sns-topic-arn
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-region
+        - name: AWS_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shared-infra-config
+              key: aws-endpoint-url
         - name: INVENTORY_SERVICE_URL
           valueFrom:
             configMapKeyRef:

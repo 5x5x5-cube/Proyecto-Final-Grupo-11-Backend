@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: payment-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::881005428234:role/proyecto-final-dev-payment-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::735566955557:role/proyecto-final-dev-payment-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: payment-service-sa
       containers:
       - name: payment-service
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-payment-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-payment-service:latest
         ports:
         - containerPort: 8000
         env:

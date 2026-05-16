@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: inventory-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::881005428234:role/proyecto-final-dev-inventory-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::735566955557:role/proyecto-final-dev-inventory-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: inventory-service-sa
       containers:
       - name: inventory-service
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-inventory-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-inventory-service:latest
         ports:
         - containerPort: 8000
         env:

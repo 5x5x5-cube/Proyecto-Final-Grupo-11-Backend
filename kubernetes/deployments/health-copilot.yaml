@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: health-copilot
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-health-copilot:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-health-copilot:latest
         ports:
         - containerPort: 8000
         livenessProbe:

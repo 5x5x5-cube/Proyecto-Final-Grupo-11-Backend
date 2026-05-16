@@ -3,7 +3,7 @@ kind: ServiceAccount
 metadata:
   name: notification-service-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::881005428234:role/proyecto-final-dev-notification-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::735566955557:role/proyecto-final-dev-notification-service-role
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,7 +24,7 @@ spec:
       serviceAccountName: notification-service-sa
       containers:
       - name: notification-service
-        image: 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-notification-service:latest
+        image: 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-notification-service:latest
         ports:
         - containerPort: 8000
         env:
@@ -38,7 +38,7 @@ spec:
             configMapKeyRef:
               name: shared-infra-config
               key: redis-url
-        - name: NOTIFICATION_QUEUE_URL
+        - name: SQS_QUEUE_URL
           valueFrom:
             configMapKeyRef:
               name: shared-infra-config

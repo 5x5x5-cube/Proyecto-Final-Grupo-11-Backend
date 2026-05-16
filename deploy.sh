@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Variables
 CLUSTER_NAME="proyecto-final-dev"
 REGION="us-east-1"
-AWS_ACCOUNT_ID="881005428234"
+AWS_ACCOUNT_ID="735566955557"
 ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 ECR_PREFIX="proyecto-final-dev"
 

@@ -65,11 +65,11 @@ docker build -t reports-service:latest .
 
 ```bash
 # Si usas AWS ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 881005428234.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 735566955557.dkr.ecr.us-east-1.amazonaws.com
 
 # Build y push
-docker build -t 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest .
-docker push 881005428234.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest
+docker build -t 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest .
+docker push 735566955557.dkr.ecr.us-east-1.amazonaws.com/proyecto-final-dev-reports-service:latest
 
 # Deploy
 kubectl apply -f kubernetes/dev/secrets.yaml
