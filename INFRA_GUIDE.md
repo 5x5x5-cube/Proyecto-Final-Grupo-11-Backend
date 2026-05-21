@@ -132,6 +132,25 @@ Expected attachments:
 
 Any role that publishes (`payment`, `booking`, `inventory`, `notification`) **must** carry `sns-publish-access`. The historical bug that motivated this check: `booking-service-role` was missing it, so booking-worker silently dropped every `booking_created` event and no confirmation emails were sent.
 
+> ⚠️ **Terraform state can lie.** A second incident: `module.irsa.aws_iam_role_policy_attachment.notification_sqs` showed in state with the correct `policy_arn`, but the role in AWS had a *different* policy attached (`sqs-access` instead of `notification-sqs-access`). The `notification-sqs-access` policy only allows access to its dedicated queue; the wrong attachment caused `sqs:ReceiveMessage AccessDenied` on the notification queue and no emails were ever consumed. **Always cross-check the live AWS attachment list against the table above — do not trust terraform state alone.** Fix manually with `aws iam detach-role-policy` / `attach-role-policy` if they diverge.
+
+### 8.2. Pod env vs deployment yaml drift
+
+After step 5, **always re-apply the K8s manifests once more** and then spot-check that a critical env var actually made it into a running pod:
+
+```bash
+kubectl apply -f kubernetes/deployments/
+kubectl exec deployment/booking-service -- env | grep -E "AWS_ENDPOINT_URL|SQS_QUEUE_URL|SNS_TOPIC_ARN"
+kubectl exec deployment/notification-service -- env | grep -E "SQS_QUEUE_URL"
+```
+
+Both of the following classes of bugs have shipped silently and broken the email pipeline:
+
+- `AWS_ENDPOINT_URL` missing → Pydantic config falls back to the dev default `http://localhost:4566`, and SNS publishes go to a non-existent localstack endpoint. The configmap value is set to the empty string (`""`) on purpose; the env var must still be projected into the pod.
+- `SQS_QUEUE_URL` wired to the wrong configmap key, or missing entirely → boto3 forms a malformed `https://sqs.us-east-1.amazonaws.com/` URL and every `ReceiveMessage` returns `InvalidAddress`.
+
+Root cause both times: an earlier `kubectl apply` ran against an older revision of the yaml and the deployment spec drifted. The yaml in the repo is correct; the *applied* spec is what counts. Re-apply explicitly, don't assume.
+
 ---
 
 ## 🔴 Destroy (~15 min)
